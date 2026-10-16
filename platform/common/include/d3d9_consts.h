@@ -1,0 +1,102 @@
+// MatrixGame - SR2 Planetary battles engine with Windows and Linux support
+// Copyright (C) 2004-2019 Elemental Games, Katauri Interactive, CHK-Games
+// Copyright (C) 2020-2022 murgesku (https://github.com/murgesku)
+// Copyright (C) 2022-2024 vladislavrv (https://github.com/vladislavrv)
+// Copyright (C) 2026 giantplaceholder (https://github.com/giantplaceholder)
+// Licensed under GPLv2 or any later version
+// Refer to the LICENSE and NOTICE files included
+
+#pragma once
+constexpr uint32_t D3DBLEND_DESTALPHA = 0;
+constexpr uint32_t D3DBLEND_INVDESTALPHA = 0;
+constexpr uint32_t D3DBLEND_SRCCOLOR = 0;
+constexpr uint32_t D3DCMP_ALWAYS = 0;
+constexpr uint32_t D3DCMP_EQUAL = 0;
+constexpr uint32_t D3DCMP_GREATEREQUAL = 0;
+constexpr uint32_t D3DCMP_LESSEQUAL = 0;
+constexpr uint32_t D3DCMP_NOTEQUAL = 0;
+constexpr uint32_t D3DFILL_SOLID = 0;
+constexpr uint32_t D3DFILL_WIREFRAME = 0;
+constexpr uint32_t D3DFMT_A8L8 = 0;
+constexpr uint32_t D3DFMT_A8R3G3B2 = 0;
+constexpr uint32_t D3DFMT_D24X8 = 0;
+constexpr uint32_t D3DFMT_DXT1 = 0;
+constexpr uint32_t D3DFOG_LINEAR = 0;
+constexpr uint32_t D3DFOG_NONE = 0;
+constexpr uint32_t D3DLIGHT_DIRECTIONAL = 0;
+constexpr uint32_t D3DLOCK_NOOVERWRITE = 0;
+constexpr uint32_t D3DMCS_MATERIAL = 0;
+constexpr uint32_t D3DMULTISAMPLE_NONE = 0;
+constexpr uint32_t D3DPRASTERCAPS_WFOG = 0x00100000;
+constexpr uint32_t D3DPT_TRIANGLEFAN = 6;
+constexpr uint32_t D3DSGR_CALIBRATE = 0;
+constexpr uint32_t D3DSHADE_FLAT = 0;
+constexpr uint32_t D3DSHADE_GOURAUD = 0;
+constexpr uint32_t D3DSTENCILCAPS_TWOSIDED = 0;
+constexpr uint32_t D3DSTENCILOP_KEEP = 1;
+constexpr uint32_t D3DSTENCILOP_ZERO = 2;
+constexpr uint32_t D3DSTENCILOP_REPLACE = 3;
+constexpr uint32_t D3DSTENCILOP_INCRSAT = 4;
+constexpr uint32_t D3DSTENCILOP_DECRSAT = 5;
+constexpr uint32_t D3DSTENCILOP_INVERT = 6;
+constexpr uint32_t D3DSTENCILOP_INCR = 7;
+constexpr uint32_t D3DSTENCILOP_DECR = 8;
+constexpr uint32_t D3DSWAPEFFECT_DISCARD = 0;
+constexpr uint32_t D3DTOP_BLENDCURRENTALPHA = 0;
+constexpr uint32_t D3DTOP_BLENDFACTORALPHA = 0;
+constexpr uint32_t D3DTOP_MODULATE2X = 0;
+constexpr uint32_t D3DTSS_TCI_CAMERASPACENORMAL = 0;
+constexpr uint32_t D3DTSS_TCI_PASSTHRU = 0;
+constexpr uint32_t D3DZB_FALSE = 0;
+constexpr uint32_t GWL_STYLE = 0;
+constexpr uint32_t SW_MINIMIZE = 0;
+constexpr uint32_t SW_SHOWNORMAL = 0;
+constexpr uint32_t VK_ADD = 0x6B;
+constexpr uint32_t VK_APPS = 0x5D;
+constexpr uint32_t VK_BACK = 0x08;
+constexpr uint32_t VK_CAPITAL = 0x14;
+constexpr uint32_t VK_CONTROL = 0x11;
+constexpr uint32_t VK_DELETE = 0x2E;
+constexpr uint32_t VK_DIVIDE = 0x6F;
+constexpr uint32_t VK_DOWN = 0x28;
+constexpr uint32_t VK_END = 0x23;
+constexpr uint32_t VK_F9 = 0x78;
+constexpr uint32_t VK_HOME = 0x24;
+constexpr uint32_t VK_INSERT = 0x2D;
+constexpr uint32_t VK_LCONTROL = 0xA2;
+constexpr uint32_t VK_LEFT = 0x25;
+constexpr uint32_t VK_LMENU = 0xA4;
+constexpr uint32_t VK_LSHIFT = 0xA0;
+constexpr uint32_t VK_LWIN = 0x5B;
+constexpr uint32_t VK_MENU = 0x12;
+constexpr uint32_t VK_MULTIPLY = 0x6A;
+constexpr uint32_t VK_NEXT = 0x22;
+constexpr uint32_t VK_NUMLOCK = 0x90;
+constexpr uint32_t VK_NUMPAD0 = 0x60;
+constexpr uint32_t VK_NUMPAD1 = 0x61;
+constexpr uint32_t VK_NUMPAD2 = 0x62;
+constexpr uint32_t VK_NUMPAD3 = 0x63;
+constexpr uint32_t VK_NUMPAD4 = 0x64;
+constexpr uint32_t VK_NUMPAD5 = 0x65;
+constexpr uint32_t VK_NUMPAD6 = 0x66;
+constexpr uint32_t VK_NUMPAD7 = 0x67;
+constexpr uint32_t VK_NUMPAD8 = 0x68;
+constexpr uint32_t VK_NUMPAD9 = 0x69;
+constexpr uint32_t VK_OEM_4 = 0xDB;
+constexpr uint32_t VK_OEM_5 = 0xDC;
+constexpr uint32_t VK_OEM_6 = 0xDD;
+constexpr uint32_t VK_OEM_COMMA = 0xBC;
+constexpr uint32_t VK_OEM_MINUS = 0xBD;
+constexpr uint32_t VK_OEM_PLUS = 0xBB;
+constexpr uint32_t VK_PAUSE = 0x13;
+constexpr uint32_t VK_PRIOR = 0x21;
+constexpr uint32_t VK_RCONTROL = 0xA3;
+constexpr uint32_t VK_RIGHT = 0x27;
+constexpr uint32_t VK_RMENU = 0xA5;
+constexpr uint32_t VK_RSHIFT = 0xA1;
+constexpr uint32_t VK_RWIN = 0x5C;
+constexpr uint32_t VK_SCROLL = 0x91;
+constexpr uint32_t VK_SEPARATOR = 0x6C;
+constexpr uint32_t VK_SUBTRACT = 0x6D;
+constexpr uint32_t VK_TAB = 0x09;
+constexpr uint32_t VK_UP = 0x26;

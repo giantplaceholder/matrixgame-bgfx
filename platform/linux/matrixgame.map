@@ -1,0 +1,13 @@
+# Exported symbols of libMatrixGame.so.
+#
+# The host engine resolves exactly one name through dlsym/GetProcAddress, see
+# MatrixGame/src/MatrixGameDll.hpp. Everything else, including the statically
+# linked SDL2, libpng, zlib and bgfx, stays local: the host loads its own copies
+# of those libraries, and mixing the two sets of globals is how you get two
+# instances of one runtime inside a single process.
+{
+    global:
+        GetRobotInterface;
+    local:
+        *;
+};
