@@ -4,6 +4,8 @@ This repo contains a version of MatrixGame, 3D engine used in Space Rangers HD: 
 
 In order to avoid a major engine re-write, this version uses [bgfx](https://github.com/bkaradzic/bgfx), translating native Direct3D calls to Vulkan. Input and system integration are handled by [SDL](https://github.com/libsdl-org/SDL).
 
+Additionally, the engine has been updated to work natively on 64-bit platforms. 32-bit platform support has been dropped.
+
 This project would not have been possible without the outstanding work of [murgesku](https://github.com/murgesku) and [vladislavrv](https://github.com/vladislavrv/MatrixGame), whom developed their versions of MatrixGame which became a base for this one.
 
 # Work in progress?
@@ -48,6 +50,8 @@ Then build your own Rangers.exe as instructed, build your own MatrixGame as desc
 
 - Windows 10 or 11
 - Linux (any modern distro; tested on Ubuntu 24.04.4, Debian Trixie, Linux Mint Xia 22.1, SteamOS 3.8.26 on Steam Deck)
+
+Only 64-bit platforms are supported.
 
 **PLEASE NOTE**: in this context, "supported client OS" means "the ones that I've tested this on". It is not an exhaustive list.
 
