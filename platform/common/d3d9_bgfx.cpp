@@ -297,6 +297,17 @@ uint32_t g_alpha_op = 2;      // D3DTOP_SELECTARG1
 uint32_t g_alpha_arg1 = 2;    // D3DTA_TEXTURE
 uint32_t g_alpha_arg2 = 1;    // D3DTA_CURRENT
 uint32_t g_mag_filter = 2;    // D3DTEXF_LINEAR
+uint32_t g_min_filter = 2;
+uint32_t g_mip_filter = 2;
+uint32_t g_aniso = 1;
+uint32_t g_bb_w = 0;
+uint32_t g_bb_h = 0;
+uint32_t g_msaa = 0;
+uint32_t g_interval = 0;
+uint32_t g_applied_flags = 0xffffffffu;
+uint32_t g_applied_chain = 0xffffffffu;
+uint32_t g_applied_w = 0;
+uint32_t g_applied_h = 0;
 uint32_t g_addr_u = 1;        // WRAP
 uint32_t g_addr_v = 1;
 int g_water_draw = 0;
@@ -1102,6 +1113,7 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
             if (g_state_zwrite) state |= BGFX_STATE_WRITE_Z;
         }
         if (g_state_alpha) state |= BGFX_STATE_BLEND_FUNC(blend_factor(g_blend_src), blend_factor(g_blend_dst));
+        if (g_msaa >= 2) state |= BGFX_STATE_MSAA;
         // D3DCULL_CW drops clockwise, D3DCULL_CCW drops counter-clockwise
         if (!lines) {
             if (g_cull == 2) state |= BGFX_STATE_CULL_CW;
@@ -1113,7 +1125,15 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
         scissor_subview();
         if (textured && g_texture && bgfx::isValid(bgfx::TextureHandle{g_texture->bgfx_tex})) {
             uint32_t samp = 0;
-            if (g_mag_filter <= 1) samp |= BGFX_SAMPLER_POINT | BGFX_SAMPLER_MIP_POINT;
+            // 3 is anisotropic. a saved state of 0 used to force point and wipe this
+            const bool aniso = g_aniso >= 2 && (g_min_filter == 3 || g_mag_filter == 3);
+            const bool point = !aniso && g_min_filter <= 1 && g_mag_filter <= 1;
+            if (aniso)
+                samp |= BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC;
+            else if (point)
+                samp |= BGFX_SAMPLER_POINT | BGFX_SAMPLER_MIP_POINT;
+            else if (g_mip_filter <= 1)
+                samp |= BGFX_SAMPLER_MIP_POINT;
             if (!g_water_draw && (g_addr_u == 3 || g_addr_v == 3))
                 samp |= BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
             bgfx::setTexture(0, g_sampler, bgfx::TextureHandle{g_texture->bgfx_tex}, samp);
@@ -1497,9 +1517,63 @@ void mgfx_set_render_state(uint32_t state, uint32_t value) {
 
 void mgfx_set_sampler(uint32_t stage, uint32_t type, uint32_t value) {
     if (stage != 0) return;
-    if (type == D3DSAMP_MAGFILTER || type == D3DSAMP_MINFILTER) g_mag_filter = value;
+    if (type == D3DSAMP_MAGFILTER) g_mag_filter = value;
+    else if (type == D3DSAMP_MINFILTER) g_min_filter = value;
+    else if (type == D3DSAMP_MIPFILTER) g_mip_filter = value;
     else if (type == D3DSAMP_ADDRESSU) g_addr_u = value;
     else if (type == D3DSAMP_ADDRESSV) g_addr_v = value;
+    else if (type == D3DSAMP_MAXANISOTROPY) mgfx_set_anisotropy(int(value));
+}
+
+uint32_t mgfx_get_sampler(uint32_t stage, uint32_t type) {
+    if (stage != 0) return 0;
+    if (type == D3DSAMP_MAGFILTER) return g_mag_filter;
+    if (type == D3DSAMP_MINFILTER) return g_min_filter;
+    if (type == D3DSAMP_MIPFILTER) return g_mip_filter;
+    if (type == D3DSAMP_ADDRESSU) return g_addr_u;
+    if (type == D3DSAMP_ADDRESSV) return g_addr_v;
+    if (type == D3DSAMP_MAXANISOTROPY) return g_aniso ? g_aniso : 1;
+    return 0;
+}
+
+void mgfx_set_anisotropy(int degree) {
+    g_aniso = degree > 0 ? uint32_t(degree) : 0;
+    if (g_bb_w && g_bb_h)
+        mgfx_apply_present(g_bb_w, g_bb_h, g_msaa, g_interval);
+}
+
+void mgfx_apply_present(uint32_t width, uint32_t height, uint32_t samples, uint32_t interval) {
+    if (width) g_bb_w = width;
+    if (height) g_bb_h = height;
+    g_msaa = samples;
+    g_interval = interval;
+    if (!bgfx::getCaps() || !g_bb_w || !g_bb_h) return;
+    uint32_t flags = 0;
+    uint32_t chain_flags = 0;
+    switch (samples) {
+        case 2: chain_flags |= BGFX_SWAP_CHAIN_MSAA_X2; break;
+        case 4: chain_flags |= BGFX_SWAP_CHAIN_MSAA_X4; break;
+        case 8: chain_flags |= BGFX_SWAP_CHAIN_MSAA_X8; break;
+        case 16: chain_flags |= BGFX_SWAP_CHAIN_MSAA_X16; break;
+        default: break;
+    }
+    // D3DPRESENT_INTERVAL_ONE
+    if (interval == 1) flags |= BGFX_RESET_VSYNC;
+    if (g_aniso >= 2) flags |= BGFX_RESET_MAXANISOTROPY;
+    if (flags == g_applied_flags && chain_flags == g_applied_chain && g_bb_w == g_applied_w && g_bb_h == g_applied_h) return;
+    bgfx::SwapChain chain;
+    chain.width = g_bb_w;
+    chain.height = g_bb_h;
+    chain.flags = chain_flags;
+    bgfx::reset(flags, &chain);
+    g_applied_flags = flags;
+    g_applied_chain = chain_flags;
+    g_applied_w = g_bb_w;
+    g_applied_h = g_bb_h;
+    std::cout << "video " << g_bb_w << "x" << g_bb_h
+              << " msaa " << samples
+              << " aniso " << g_aniso
+              << " vsync " << int(interval == 1) << std::endl;
 }
 
 void mgfx_set_tss(uint32_t stage, uint32_t type, uint32_t value) {
@@ -1932,11 +2006,59 @@ void mgfx_texture_upload(IDirect3DTexture9* tex) {
         }
     }
     const uint32_t bytes = tex->width * tex->height * 4;
-    auto mem = bgfx::copy(tex->rgba.data(), bytes);
+    const bool want_mips = !cpu_text && (tex->width > 1 || tex->height > 1);
+    const bgfx::Memory* mem = nullptr;
+    if (!want_mips) {
+        mem = bgfx::copy(tex->rgba.data(), bytes);
+    } else {
+        uint32_t levels = 1;
+        uint32_t mw = tex->width, mh = tex->height;
+        size_t total = bytes;
+        while (mw > 1 || mh > 1) {
+            mw = mw > 1 ? mw / 2 : 1;
+            mh = mh > 1 ? mh / 2 : 1;
+            total += size_t(mw) * mh * 4;
+            ++levels;
+        }
+        mem = bgfx::alloc(uint32_t(total));
+        std::memcpy(mem->data, tex->rgba.data(), bytes);
+        const uint8_t* src = mem->data;
+        uint8_t* dst = mem->data + bytes;
+        mw = tex->width;
+        mh = tex->height;
+        for (uint32_t level = 1; level < levels; ++level) {
+            const uint32_t dw = mw > 1 ? mw / 2 : 1;
+            const uint32_t dh = mh > 1 ? mh / 2 : 1;
+            for (uint32_t y = 0; y < dh; ++y) {
+                const uint32_t y0 = y * 2;
+                const uint32_t y1 = y0 + 1 < mh ? y0 + 1 : y0;
+                for (uint32_t x = 0; x < dw; ++x) {
+                    const uint32_t x0 = x * 2;
+                    const uint32_t x1 = x0 + 1 < mw ? x0 + 1 : x0;
+                    const uint8_t* p00 = src + (size_t(y0) * mw + x0) * 4;
+                    const uint8_t* p10 = src + (size_t(y0) * mw + x1) * 4;
+                    const uint8_t* p01 = src + (size_t(y1) * mw + x0) * 4;
+                    const uint8_t* p11 = src + (size_t(y1) * mw + x1) * 4;
+                    uint8_t* o = dst + (size_t(y) * dw + x) * 4;
+                    for (int c = 0; c < 4; ++c)
+                        o[c] = uint8_t((int(p00[c]) + p10[c] + p01[c] + p11[c]) / 4);
+                }
+            }
+            src = dst;
+            dst += size_t(dw) * dh * 4;
+            mw = dw;
+            mh = dh;
+        }
+        static int mip_logged = 0;
+        if (mip_logged < 4) {
+            ++mip_logged;
+            std::cout << "mips " << tex->width << "x" << tex->height << " levels " << levels << std::endl;
+        }
+    }
     // recreate the texture, updateTexture2D is ignored
     auto existing = bgfx::TextureHandle{tex->bgfx_tex};
     if (bgfx::isValid(existing)) bgfx::destroy(existing);
-    auto handle = bgfx::createTexture2D(uint16_t(tex->width), uint16_t(tex->height), false, 1, bgfx::TextureFormat::RGBA8, BGFX_SAMPLER_NONE | BGFX_TEXTURE_NONE, mem);
+    auto handle = bgfx::createTexture2D(uint16_t(tex->width), uint16_t(tex->height), want_mips, 1, bgfx::TextureFormat::RGBA8, BGFX_SAMPLER_NONE | BGFX_TEXTURE_NONE, mem);
     tex->bgfx_tex = bgfx::isValid(handle) ? handle.idx : uint16_t(0xFFFF);
 }
 

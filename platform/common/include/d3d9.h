@@ -30,6 +30,9 @@ void mgfx_end_cpu_target();
 void mgfx_set_transform(uint32_t which, const void* matrix);
 void mgfx_set_texture(uint32_t stage, IDirect3DTexture9* tex);
 void mgfx_set_sampler(uint32_t stage, uint32_t type, uint32_t value);
+uint32_t mgfx_get_sampler(uint32_t stage, uint32_t type);
+void mgfx_set_anisotropy(int degree);
+void mgfx_apply_present(uint32_t width, uint32_t height, uint32_t samples, uint32_t interval);
 void mgfx_set_fvf(uint32_t fvf);
 void mgfx_set_stream(IDirect3DVertexBuffer9* vb, uint32_t offset, uint32_t stride);
 void mgfx_set_indices(IDirect3DIndexBuffer9* ib);
@@ -256,7 +259,10 @@ struct IDirect3DDevice9 {
         return mgfx_clear(flags, color, z);
     }
     virtual long GetRenderState(uint32_t, uint32_t* value) { if (value) *value = 0; return S_OK; }
-    virtual long GetSamplerState(uint32_t, uint32_t, uint32_t* value) { if (value) *value = 0; return S_OK; }
+    virtual long GetSamplerState(uint32_t stage, uint32_t type, uint32_t* value) {
+        if (value) *value = mgfx_get_sampler(stage, type);
+        return S_OK;
+    }
     virtual long GetLight(uint32_t, D3DLIGHT9*) { return S_OK; }
     virtual long GetLightEnable(uint32_t, int* value) { if (value) *value = 0; return S_OK; }
     virtual long GetMaterial(D3DMATERIAL9*) { return S_OK; }
@@ -302,7 +308,10 @@ struct IDirect3DDevice9 {
     virtual uint32_t GetAvailableTextureMem() { return 256 * 1024 * 1024; }
     virtual long ColorFill(IDirect3DSurface9*, const D3DRECT*, D3DCOLOR) { return S_OK; }
     virtual long TestCooperativeLevel() { return S_OK; }
-    virtual long Reset(D3DPRESENT_PARAMETERS*) { return S_OK; }
+    virtual long Reset(D3DPRESENT_PARAMETERS* pp) {
+        if (pp) mgfx_apply_present(pp->BackBufferWidth, pp->BackBufferHeight, pp->MultiSampleType, pp->PresentationInterval);
+        return S_OK;
+    }
     virtual long UpdateTexture(IDirect3DTexture9* src, IDirect3DTexture9* dst) {
         if (!src || !dst || src->rgba.empty()) return S_OK;
         dst->width = src->width ? src->width : 1;
@@ -363,7 +372,13 @@ struct IDirect3D9 {
     }
     virtual long CreateDevice(uint32_t, uint32_t, HWND, uint32_t, D3DPRESENT_PARAMETERS*, IDirect3DDevice9** device);
     virtual long CheckDeviceFormat(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t) { return S_OK; }
-    virtual long CheckDeviceMultiSampleType(uint32_t, uint32_t, uint32_t, int, uint32_t, DWORD*) { return S_OK; }
+    virtual long CheckDeviceMultiSampleType(uint32_t, uint32_t, uint32_t, int, uint32_t samples, DWORD*) {
+        // bgfx can do these counts and no others
+        switch (samples) {
+            case 0: case 2: case 4: case 8: case 16: return S_OK;
+            default: return E_FAIL;
+        }
+    }
     // The host calls this before any device exists: MatrixGameDll Support() uses it to
     virtual long GetDeviceCaps(uint32_t, uint32_t, D3DCAPS9* caps) {
         if (caps) {

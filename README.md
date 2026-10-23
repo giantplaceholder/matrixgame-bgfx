@@ -18,21 +18,19 @@ Let me be blunt: as is, this is a demo or maybe an alpha. Bugs may and will be e
 
 Tested and works:
 - Launching the planetary battle from the main menu of Space Rangers HD
-- Launching the battle as government quest: host game does not crash, player gets the award
-- Main gameplay loop (training map is finishable)
-- Big maps (they do not crash the game per se, but AI seems to crush me :)
-- Music and sound
-- Some additional effects like volume and stencil shadows
-- You can finish the battle in-game and start another after exiting it
-- End game stats
+- Launching the battle as government quest: host game does not crash, player gets the reward
+- Finishing the battle in-game and start another after exiting it
+- Main gameplay loop works OK (training map is finishable)
+- Big maps load and run (they do not crash the game per se, but AI seems to crush me :)
+- End game stats are tracked properly
+- Music and sound play normally
+- Stencil shadows, volume shadows, anisotropic filtering and anti-aliasing should work now
 
 What is not tested:
-- Tweaking planetary battle settings from the host game
 - Everything else I did not mention
 
 Known issues/limitations:
 - No text or button captions in standalone (.exe) mode. At the moment this is by design: this version mirrors the behavior of the original MatrixGame from SR2\HD, and does not render any text bitmaps by itself, instead relying on host game to do that. The exe does run, though.
-- Anti-aliasing is not working yet
 - In exe mode, MatrixGame requires additional libraries to be present or linked, like SDL 2.0 or WinThreads implementation from MinGW - and looks for them next to itself. DLL carries all of them built-in.
 - The build process contains an enormous amount of warnings I didn't have time to clean up yet.
   
@@ -47,7 +45,7 @@ Then build your own Rangers.exe as instructed, build your own MatrixGame as desc
 # Supported client OS?
 
 - Windows 10 or 11
-- Linux (any modern distro; tested on Ubuntu 24.04.4, Debian Trixie, Linux Mint Xia 22.1, SteamOS 3.8.26 on Steam Deck)
+- Linux (any modern distro; tested on Ubuntu 24.04.4, Debian Trixie, Linux Mint Xia 22.1, Arch Linux/CachyOS, and SteamOS 3.8.26 on Steam Deck)
 
 Only 64-bit platforms are supported.
 
@@ -91,4 +89,4 @@ This project is licensed under [GPLv2](LICENSE) or any later, per your choice.
 
 # Acknowledgements?
 
-This code is based on [vladislavrv](https://github.com/vladislavrv/MatrixGame)'s version of MatrixGame, which is in turn based on [murgesku](https://github.com/murgesku/MatrixGame)'s version of MatrixGame - which is in turn based on the [original GPLv2 release of MatrixGame](https://snk-games.net/matrixgame.tar.gz), as released by [CHK-Games](https://snk-games.net) in 2019. All of those are also licensed as GPLv2.
+This code is based on [vladislavrv](https://github.com/vladislavrv/MatrixGame)'s version of MatrixGame, which is in turn based on [murgesku](https://github.com/murgesku/MatrixGame)'s version of MatrixGame - which is in turn based on the [original GPLv2 release of MatrixGame](https://snk-games.net/matrixgame.tar.gz), as released by CHK-Games back in December of 2019 ([see original post](https://web.archive.org/web/20220102100125/https://snk-games.net/forums/viewtopic.php?f=41&t=2154) in Russian). All of those are also licensed as GPLv2.

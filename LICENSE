@@ -1,3 +1,13 @@
+This project is licensed under the GNU General Public License, version 2 or
+(at your option) any later version (SPDX-License-Identifier: GPL-2.0-or-later).
+
+Original MatrixGame engine was also released as GPL-2.0-or-later:
+https://web.archive.org/web/20220102100125/https://snk-games.net/forums/viewtopic.php?f=41&t=2154
+
+Third-party libraries, dependencies, modules, and other bundled components remain subject
+to their own applicable license terms and notices.
+
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 

@@ -12,12 +12,15 @@
 #include "MatrixGameDll.hpp"
 #include "3g.hpp"
 
+void mgfx_set_anisotropy(int degree);
+
 CMatrixSampleStateManager::CMatrixSampleStateManager(void) {}
 
 CMatrixSampleStateManager::~CMatrixSampleStateManager(void) {}
 
 void CMatrixSampleStateManager::ApplySettings(SRobotsSettings *set) {
     m_AFDegree = g_D3DDCaps.MaxAnisotropy < set->m_AFDegree ? g_D3DDCaps.MaxAnisotropy : set->m_AFDegree;
+    mgfx_set_anisotropy(m_AFDegree);
 }
 
 HRESULT CMatrixSampleStateManager::SetState(DWORD sampler, D3DSAMPLERSTATETYPE type, DWORD value) {

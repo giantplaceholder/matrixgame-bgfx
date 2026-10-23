@@ -36,7 +36,14 @@ const char* g_mg_stage = "start";
 
 // //////////////////////////////////////////////////////////////////////////////
 #include <stupid_logger.hpp>
-logger_type lgr{"test.log"};
+namespace {
+struct null_log_buf : std::streambuf {
+    int overflow(int c) override { return c; }
+};
+null_log_buf g_null_log_buf;
+std::ostream g_null_log{&g_null_log_buf};
+}
+logger_type lgr{g_null_log};
 // //////////////////////////////////////////////////////////////////////////////
 
 CHeap *g_MatrixHeap;
