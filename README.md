@@ -51,35 +51,9 @@ Only 64-bit platforms are supported.
 
 **PLEASE NOTE**: in this context, "supported client OS" means "the ones that I've tested this on". It is not an exhaustive list.
 
-# Ready-to-use binaries when?
-
-Github Actions are enabled for this repo. Binaries are automatically built for every new tag.
-
-Please note that Linux binaries are NOT portable: they are built in Ubuntu 24.04 runner environment, and they will probably run without any issues only on similar Ubuntu or Linux Mint distros.
-
 # How to build?
 
-Right now you have to run Linux to build this. I recommend using Ubuntu 24.04 or Debian Trixie. 
-
-Network is required to download bgfx dependencies, as well as cross-build dependencies.
-
-On Ubuntu or Mint, make sure that you have enabled universe repo, as some of the packages build requires are there.
-
-1. Install dependencies:
-
-```
-sudo apt-get update && sudo apt-get install -y build-essential git cmake curl ca-certificates pkg-config g++-mingw-w64-x86-64-posix libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxrender-dev libxinerama-dev libxxf86vm-dev libxss-dev libgl1-mesa-dev libegl-dev libwayland-dev libasound2-dev libvulkan1 mesa-vulkan-drivers libgl1 libegl1 libx11-6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libxss1 libasound2t64 libwayland-client0 libwayland-egl1
-```
-
-2. Clone this repo:
-
-```
-git clone https://github.com/giantplaceholder/matrixgame-bgfx.git
-```
-
-3. Launch build script: either run  ```./build_linux.sh``` to build Linux .so, or ```./build_windows.sh``` to build Windows DLL. Binaries will be placed to ```/out``` directory next to the build scripts.
-
-4. Now just copy the binaries to your game folder, run Rangers.exe and try to play a planetary battle.
+This project can be built both on Linux and Windows. Please refer to [BUILD.md](BUILD.md) for specific build instructions.
 
 # AI involvement?
 
