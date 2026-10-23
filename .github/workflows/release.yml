@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
       - name: install build tools
         run: |
           sudo apt-get update
@@ -22,10 +23,13 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxfixes-dev libxrender-dev libxinerama-dev libxxf86vm-dev libxss-dev \
             libgl1-mesa-dev libegl-dev libwayland-dev libasound2-dev
+
       - name: linux
-        run: ./build_linux.sh
+        run: bash ./build_linux.sh
+
       - name: windows
-        run: ./build_windows.sh
+        run: bash ./build_windows.sh
+
       - name: pack
         run: |
           tag="${GITHUB_REF_NAME}"
@@ -36,6 +40,7 @@ jobs:
             zip -r "${GITHUB_WORKSPACE}/dist/matrixgame-${tag}-windows-x86_64.zip" \
               matrixgame.exe MatrixGame.dll SDL2.dll
           )
+
       - name: upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
