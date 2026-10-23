@@ -51,6 +51,12 @@ Only 64-bit platforms are supported.
 
 **PLEASE NOTE**: in this context, "supported client OS" means "the ones that I've tested this on". It is not an exhaustive list.
 
+# Ready-to-use binaries when?
+
+Github Actions are enabled for this repo. Binaries are automatically built for every new tag.
+
+Please note that Linux binaries are NOT portable: they are built in Ubuntu 24.04 runner environment, and they will probably run without any issues only on similar Ubuntu or Linux Mint distros.
+
 # How to build?
 
 Right now you have to run Linux to build this. I recommend using Ubuntu 24.04 or Debian Trixie. 
