@@ -71,7 +71,7 @@ jobs_count() {
     mem_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo 2>/dev/null || echo 2097152)"
     n=$(( mem_kb / (per_job_gb * 1024 * 1024) ))
     (( n < 1 )) && n=1
-    (( n > cpus )) && n=cpus
+    (( n > cpus )) && n=$cpus
     echo "$n"
 }
 
