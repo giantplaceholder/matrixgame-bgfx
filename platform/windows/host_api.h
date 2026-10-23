@@ -32,7 +32,7 @@ int mgwin_find_close(void* find);
 int mgwin_qpc(int64_t* out);
 int mgwin_qpf(int64_t* out);
 
-int mg_sdl_open(const char* title, int width, int height);
+int mg_sdl_open(const char* title, int width, int height, int popup);
 void mg_sdl_close(void);
 void mg_sdl_size(int* width, int* height);
 int mg_sdl_poll(uint32_t* message, uintptr_t* wparam, intptr_t* lparam);

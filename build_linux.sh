@@ -122,11 +122,13 @@ build_pic_deps() {
         -DZLIB_INCLUDE_DIR="$PIC_PREFIX/include" -DZLIB_LIBRARY="$PIC_PREFIX/lib/libz.a"
     cmake --build "$WORK/libpng-build" --target install -j"$JOBS"
 
+    # sdl 2.30.10 doesn't compile against pipewire 1.4 (pw_node_enum_params)
     cmake -S "$WORK/SDL2" -B "$WORK/sdl-build" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PIC_PREFIX" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_STATIC_PIC=ON \
-        -DSDL_TEST=OFF -DSDL_TESTS=OFF -DSDL_INSTALL=ON
+        -DSDL_TEST=OFF -DSDL_TESTS=OFF -DSDL_INSTALL=ON \
+        -DSDL_PIPEWIRE=OFF
     cmake --build "$WORK/sdl-build" --target install -j"$JOBS"
 
     for f in libSDL2.a libpng16.a libz.a; do
@@ -146,26 +148,22 @@ copy_out() {
 build_pic_deps
 export PKG_CONFIG_PATH="$PIC_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
+# one configure, bgfx bx and bimg get built once for every artifact
+log "configuring $MODE"
+cmake -S "$SRC/platform" -B "$WORK/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="$PIC_PREFIX" \
+    -DMG_DEPS="$DEPS" \
+    -DMG_PIC_PREFIX="$PIC_PREFIX" \
+    -DMG_TARGET="$MODE"
+cmake --build "$WORK/build" -j"$JOBS"
+
 if [[ "$MODE" == "exe" || "$MODE" == "both" ]]; then
-    log "configuring executable"
-    cmake -S "$SRC/platform" -B "$WORK/build-exe" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_PREFIX_PATH="$PIC_PREFIX" \
-        -DMG_DEPS="$DEPS" \
-        -DMG_TARGET=exe
-    cmake --build "$WORK/build-exe" -j"$JOBS"
-    copy_out "$WORK/build-exe/matrixgame" matrixgame
+    copy_out "$WORK/build/matrixgame" matrixgame
 fi
 
 if [[ "$MODE" == "dll" || "$MODE" == "both" ]]; then
-    log "configuring shared library"
-    cmake -S "$SRC/platform" -B "$WORK/build-dll" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DMG_DEPS="$DEPS" \
-        -DMG_TARGET=dll \
-        -DMG_PIC_PREFIX="$PIC_PREFIX"
-    cmake --build "$WORK/build-dll" -j"$JOBS"
-    copy_out "$WORK/build-dll/MatrixGame.so" MatrixGame.so
+    copy_out "$WORK/build/MatrixGame.so" MatrixGame.so
 
     log "verifying the library is self-contained"
     exported="$(nm -D --defined-only "$OUT/MatrixGame.so" | awk '$2=="T"||$2=="W"{print $3}' | grep -v '^\s*$' || true)"

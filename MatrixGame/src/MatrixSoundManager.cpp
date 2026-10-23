@@ -945,6 +945,8 @@ void CSound::Clear(void) {
             if (m_AllSounds[i].id_internal != 0) {
                 // snd_vol(m_AllSounds[i].id_internal, 0);
                 snd_destroy(m_AllSounds[i].id_internal);
+                m_AllSounds[i].id_internal = 0;
+                m_AllSounds[i].id = SOUND_ID_EMPTY;
             }
         }
     }

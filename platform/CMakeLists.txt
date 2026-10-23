@@ -3,30 +3,34 @@ project(matrixgame LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Build kind: exe, or dll as a drop-in MatrixGame.dll / libMatrixGame.so
-set(MG_TARGET "exe" CACHE STRING "Build kind: exe or dll")
-set_property(CACHE MG_TARGET PROPERTY STRINGS exe dll)
+# exe, dll, or both, one configure so bgfx is built once
+set(MG_TARGET "exe" CACHE STRING "Build kind: exe, dll or both")
+set_property(CACHE MG_TARGET PROPERTY STRINGS exe dll both)
+if(NOT MG_TARGET MATCHES "^(exe|dll|both)$")
+    message(FATAL_ERROR "MG_TARGET must be exe, dll or both (got '${MG_TARGET}')")
+endif()
 
 if(WIN32)
     if(NOT MG_SDL2_ROOT)
         message(FATAL_ERROR "Set -DMG_SDL2_ROOT to the SDL2 MinGW development tree (the directory that contains x86_64-w64-mingw32).")
     endif()
     set(MG_SDL2_ARCH "${MG_SDL2_ROOT}/x86_64-w64-mingw32")
-    if(MG_TARGET STREQUAL "dll")
-        # static SDL2, the archive is listed twice so its deps travel with the dll
-        set(MG_SDL2_WINLINKS user32 gdi32 winmm imm32 ole32 oleaut32 shell32
-            setupapi version uuid dinput8 dxguid dxerr8)
-        add_library(SDL2::SDL2 STATIC IMPORTED)
-        set_target_properties(SDL2::SDL2 PROPERTIES
+    set(MG_SDL2_WINLINKS user32 gdi32 winmm imm32 ole32 oleaut32 shell32
+        setupapi version uuid dinput8 dxguid dxerr8)
+    if(MG_TARGET STREQUAL "dll" OR MG_TARGET STREQUAL "both")
+        # static sdl2, system deps come along on the interface
+        add_library(SDL2::SDL2-static STATIC IMPORTED)
+        set_target_properties(SDL2::SDL2-static PROPERTIES
             IMPORTED_LOCATION "${MG_SDL2_ARCH}/lib/libSDL2.a"
             INTERFACE_INCLUDE_DIRECTORIES "${MG_SDL2_ARCH}/include;${MG_SDL2_ARCH}/include/SDL2"
             INTERFACE_LINK_LIBRARIES "${MG_SDL2_WINLINKS}")
-    else()
-    add_library(SDL2::SDL2 SHARED IMPORTED)
-    set_target_properties(SDL2::SDL2 PROPERTIES
-        IMPORTED_IMPLIB "${MG_SDL2_ARCH}/lib/libSDL2.dll.a"
-        IMPORTED_LOCATION "${MG_SDL2_ARCH}/bin/SDL2.dll"
-        INTERFACE_INCLUDE_DIRECTORIES "${MG_SDL2_ARCH}/include;${MG_SDL2_ARCH}/include/SDL2")
+    endif()
+    if(NOT MG_TARGET STREQUAL "dll")
+        add_library(SDL2::SDL2 SHARED IMPORTED)
+        set_target_properties(SDL2::SDL2 PROPERTIES
+            IMPORTED_IMPLIB "${MG_SDL2_ARCH}/lib/libSDL2.dll.a"
+            IMPORTED_LOCATION "${MG_SDL2_ARCH}/bin/SDL2.dll"
+            INTERFACE_INCLUDE_DIRECTORIES "${MG_SDL2_ARCH}/include;${MG_SDL2_ARCH}/include/SDL2")
     endif()
     if(NOT MG_PNG_INCLUDE OR NOT MG_PNG_LIBRARY OR NOT MG_ZLIB_INCLUDE OR NOT MG_ZLIB_LIBRARY)
         message(FATAL_ERROR "Set MG_PNG_INCLUDE, MG_PNG_LIBRARY, MG_ZLIB_INCLUDE and MG_ZLIB_LIBRARY.")
@@ -36,22 +40,20 @@ if(WIN32)
     add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
     set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION "${MG_ZLIB_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${MG_ZLIB_INCLUDE}")
 else()
-if(MG_TARGET STREQUAL "dll")
+if(MG_TARGET STREQUAL "dll" OR MG_TARGET STREQUAL "both")
     # Archives must be -fPIC; the distro's are not. Scripts set MG_PIC_PREFIX
-    if(MG_PIC_PREFIX)
-        set(MG_SDL2_STATIC "${MG_PIC_PREFIX}/lib/libSDL2.a")
-        set(MG_SDL2_INCLUDE_DIR "${MG_PIC_PREFIX}/include/SDL2")
-        set(MG_PNG "${MG_PIC_PREFIX}/lib/libpng16.a")
-        set(MG_PNG_INCLUDE "${MG_PIC_PREFIX}/include")
-        set(MG_Z "${MG_PIC_PREFIX}/lib/libz.a")
-        set(MG_ZLIB_INCLUDE "${MG_PIC_PREFIX}/include")
+    if(NOT MG_PIC_PREFIX)
+        message(FATAL_ERROR "MG_TARGET=${MG_TARGET} needs -DMG_PIC_PREFIX=<prefix of PIC static libs>")
     endif()
+endif()
+if(MG_PIC_PREFIX)
+    set(MG_SDL2_STATIC "${MG_PIC_PREFIX}/lib/libSDL2.a")
+    set(MG_SDL2_INCLUDE_DIR "${MG_PIC_PREFIX}/include/SDL2")
+    set(MG_PNG "${MG_PIC_PREFIX}/lib/libpng16.a")
+    set(MG_PNG_INCLUDE "${MG_PIC_PREFIX}/include")
+    set(MG_Z "${MG_PIC_PREFIX}/lib/libz.a")
+    set(MG_ZLIB_INCLUDE "${MG_PIC_PREFIX}/include")
     foreach(var MG_SDL2_STATIC MG_SDL2_INCLUDE_DIR MG_PNG MG_Z)
-        if(NOT ${var})
-            message(FATAL_ERROR "MG_TARGET=dll needs -DMG_PIC_PREFIX=<prefix of PIC static libs>, or ${var} set by hand.")
-        endif()
-    endforeach()
-    foreach(var MG_SDL2_STATIC MG_PNG MG_Z)
         if(NOT EXISTS "${${var}}")
             message(FATAL_ERROR "${var} not found at ${${var}}")
         endif()
@@ -63,6 +65,7 @@ if(MG_TARGET STREQUAL "dll")
         IMPORTED_LOCATION "${MG_SDL2_STATIC}"
         INTERFACE_INCLUDE_DIRECTORIES "${MG_SDL2_INCLUDE_DIR}")
     set(SDL2_INCLUDE_DIRS "${MG_SDL2_INCLUDE_DIR}")
+    set(ENV{PKG_CONFIG_PATH} "${MG_PIC_PREFIX}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 else()
     find_package(SDL2 QUIET CONFIG)
     if(NOT TARGET SDL2::SDL2)
@@ -139,6 +142,8 @@ endif()
 set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BGFX_INSTALL OFF CACHE BOOL "" FORCE)
+# one bgfx archive for both the exe and the shared library
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(${BGFX_CMAKE_DIR} ${CMAKE_BINARY_DIR}/bgfx-cmake EXCLUDE_FROM_ALL)
 
 if(WIN32)
@@ -155,22 +160,24 @@ file(GLOB GAME_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src/Logic/*.cpp)
 
 file(GLOB LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/*/*.cpp)
+if(NOT WIN32 AND MG_PIC_DEPS)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PC_SDL2_STATIC REQUIRED sdl2)
+    set(MG_SDL2_DEPS ${PC_SDL2_STATIC_STATIC_LIBRARIES})
+    list(REMOVE_ITEM MG_SDL2_DEPS SDL2)
+endif()
 if(WIN32)
     add_library(mg_host STATIC windows/host_sdl.cpp windows/win32_host.cpp)
-    target_include_directories(mg_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows)
-    target_link_libraries(mg_host PUBLIC SDL2::SDL2 bgfx bx bimg)
+    target_include_directories(mg_host PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/windows
+        ${MG_SDL2_ARCH}/include
+        ${MG_SDL2_ARCH}/include/SDL2)
+    target_link_libraries(mg_host PUBLIC bgfx bx bimg)
     target_compile_options(mg_host PRIVATE -Wno-error -Wno-unused-parameter)
 endif()
 
-if(MG_TARGET STREQUAL "dll")
-    add_library(matrixgame SHARED
-        ${MG_PLAT_SRC} common/d3d9_bgfx.cpp common/font_stub.cpp ${GAME_SRC} ${LIB_SRC})
-    # Hosts look for exactly MatrixGame.dll / libMatrixGame.so
-    set_target_properties(matrixgame PROPERTIES
-        PREFIX "" OUTPUT_NAME "MatrixGame"
-        WINDOWS_EXPORT_ALL_SYMBOLS OFF
-        CXX_VISIBILITY_PRESET default)
-    target_include_directories(matrixgame BEFORE PRIVATE
+function(mg_add_game kind)
+    set(mg_incs
         ${CMAKE_CURRENT_SOURCE_DIR}/common/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/Base
         ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/3G
@@ -180,68 +187,71 @@ if(MG_TARGET STREQUAL "dll")
         ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src/Interface
         ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src/Text
         ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(matrixgame PRIVATE
-        SDL2::SDL2 bgfx bx bimg PNG::PNG ZLIB::ZLIB pthread)
-    if(WIN32)
-        target_link_libraries(matrixgame PRIVATE mg_host)
-        # one file for the host: fold libgcc, libstdc++ and winpthreads in too
-        target_link_options(matrixgame PRIVATE -static -static-libgcc -static-libstdc++)
+    if(kind STREQUAL "dll")
+        add_library(matrixgame_dll SHARED
+            ${MG_PLAT_SRC} common/d3d9_bgfx.cpp common/font_stub.cpp ${GAME_SRC} ${LIB_SRC})
+        set(target matrixgame_dll)
+        # hosts look for MatrixGame.dll / MatrixGame.so by that name
+        set_target_properties(${target} PROPERTIES
+            PREFIX "" OUTPUT_NAME "MatrixGame"
+            WINDOWS_EXPORT_ALL_SYMBOLS OFF
+            CXX_VISIBILITY_PRESET default)
+        target_compile_definitions(${target} PRIVATE ASSERT_OFF MATRIXGAME_BGFX MATRIXGAME_EXPORTS)
     else()
-        target_link_libraries(matrixgame PRIVATE dl)
-        # Static SDL2 needs its own dependency closure
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(PC_SDL2_STATIC REQUIRED sdl2)
-        # SDL2 is already linked by path; naming it again pulls in the shared one
-        set(MG_SDL2_DEPS ${PC_SDL2_STATIC_STATIC_LIBRARIES})
-        list(REMOVE_ITEM MG_SDL2_DEPS SDL2)
-        target_link_directories(matrixgame PRIVATE ${PC_SDL2_STATIC_STATIC_LIBRARY_DIRS})
-        target_link_libraries(matrixgame PRIVATE ${MG_SDL2_DEPS})
-        target_link_options(matrixgame PRIVATE ${PC_SDL2_STATIC_STATIC_LDFLAGS_OTHER})
-        # Export only the host entry point; the rest stays local
-        target_link_options(matrixgame PRIVATE
-            -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/linux/matrixgame.map
-            -Wl,-Bsymbolic)
+        add_executable(matrixgame_exe standalone/main.cpp
+            ${MG_PLAT_SRC} common/d3d9_bgfx.cpp common/font_stub.cpp ${GAME_SRC} ${LIB_SRC})
+        set(target matrixgame_exe)
+        set_target_properties(${target} PROPERTIES OUTPUT_NAME "matrixgame")
+        # both targets need MATRIXGAME_EXPORTS or the exe treats the entry as a dll import
+        target_compile_definitions(${target} PRIVATE
+            ASSERT_OFF MATRIXGAME_BGFX BUILD_EXE MATRIXGAME_EXPORTS)
     endif()
-    # No BUILD_EXE: MatrixGameDll.cpp supplies the entry points
-    target_compile_definitions(matrixgame PRIVATE
-        ASSERT_OFF MATRIXGAME_BGFX MATRIXGAME_EXPORTS)
-    target_compile_options(matrixgame PRIVATE
+    target_include_directories(${target} BEFORE PRIVATE ${mg_incs})
+    target_compile_options(${target} PRIVATE
         -Wno-error -Wno-unused-parameter -fpermissive -fno-strict-aliasing -fno-tree-sra -fno-tree-fre
         -include ${CMAKE_CURRENT_SOURCE_DIR}/common/include/d3dx9.h)
-    return()
-endif()
+    # release objects still have dwarf from the static libs, strip it out of the image
+    target_link_options(${target} PRIVATE -Wl,--strip-debug)
+    if(WIN32)
+        if(kind STREQUAL "dll")
+            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2-static PNG::PNG ZLIB::ZLIB)
+            target_link_options(${target} PRIVATE -static -static-libgcc -static-libstdc++)
+        else()
+            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2 PNG::PNG ZLIB::ZLIB)
+            # -static keeps winpthread inside the exe, sdl2 stays a dll, we link libSDL2.dll.a
+            target_link_options(${target} PRIVATE -static -static-libgcc -static-libstdc++)
+            # per-monitor v2 manifest, or windows bitmap-scales the window
+            set(MG_MANIFEST_OBJ ${CMAKE_CURRENT_BINARY_DIR}/matrixgame.manifest.obj)
+            add_custom_command(
+                OUTPUT ${MG_MANIFEST_OBJ}
+                COMMAND ${CMAKE_RC_COMPILER} -O coff -o ${MG_MANIFEST_OBJ}
+                        -I ${CMAKE_CURRENT_SOURCE_DIR}/windows
+                        ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.rc
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.rc
+                        ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.manifest
+                VERBATIM)
+            set_source_files_properties(${MG_MANIFEST_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+            target_sources(${target} PRIVATE ${MG_MANIFEST_OBJ})
+        endif()
+    else()
+        target_link_libraries(${target} PRIVATE bgfx bx bimg SDL2::SDL2 PNG::PNG ZLIB::ZLIB dl pthread)
+        if(MG_PIC_DEPS)
+            target_link_directories(${target} PRIVATE ${PC_SDL2_STATIC_STATIC_LIBRARY_DIRS})
+            target_link_libraries(${target} PRIVATE ${MG_SDL2_DEPS})
+            target_link_options(${target} PRIVATE ${PC_SDL2_STATIC_STATIC_LDFLAGS_OTHER})
+        endif()
+        if(kind STREQUAL "dll")
+            # only export the host entry, leave the rest local
+            target_link_options(${target} PRIVATE
+                -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/linux/matrixgame.map
+                -Wl,-Bsymbolic)
+        endif()
+    endif()
+endfunction()
 
-add_executable(matrixgame standalone/main.cpp ${MG_PLAT_SRC} common/d3d9_bgfx.cpp common/font_stub.cpp ${GAME_SRC} ${LIB_SRC})
-target_include_directories(matrixgame BEFORE PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/Base
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/3G
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixLib/Bitmap
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src/Interface
-    ${CMAKE_CURRENT_SOURCE_DIR}/../MatrixGame/src/Text
-    ${SDL2_INCLUDE_DIRS}
-)
-if(WIN32)
-    target_link_libraries(matrixgame PRIVATE mg_host PNG::PNG ZLIB::ZLIB)
-    target_link_options(matrixgame PRIVATE -static-libgcc -static-libstdc++)
-    # PerMonitorV2 manifest, otherwise Windows bitmap-scales the window
-    set(MG_MANIFEST_OBJ ${CMAKE_CURRENT_BINARY_DIR}/matrixgame.manifest.obj)
-    add_custom_command(
-        OUTPUT ${MG_MANIFEST_OBJ}
-        COMMAND ${CMAKE_RC_COMPILER} -O coff -o ${MG_MANIFEST_OBJ}
-                -I ${CMAKE_CURRENT_SOURCE_DIR}/windows
-                ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.rc
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.rc
-                ${CMAKE_CURRENT_SOURCE_DIR}/windows/matrixgame.manifest
-        VERBATIM)
-    set_source_files_properties(${MG_MANIFEST_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
-    target_sources(matrixgame PRIVATE ${MG_MANIFEST_OBJ})
-else()
-    target_link_libraries(matrixgame PRIVATE bgfx bx bimg SDL2::SDL2 PNG::PNG ZLIB::ZLIB dl pthread)
+if(MG_TARGET STREQUAL "dll" OR MG_TARGET STREQUAL "both")
+    mg_add_game(dll)
 endif()
-# both targets need MATRIXGAME_EXPORTS or the exe marks the entry dllimport
-target_compile_definitions(matrixgame PRIVATE
-    ASSERT_OFF MATRIXGAME_BGFX BUILD_EXE MATRIXGAME_EXPORTS)
-target_compile_options(matrixgame PRIVATE -Wno-error -Wno-unused-parameter -fpermissive -fno-strict-aliasing -fno-tree-sra -fno-tree-fre -include ${CMAKE_CURRENT_SOURCE_DIR}/common/include/d3dx9.h)
+if(NOT MG_TARGET STREQUAL "dll")
+    mg_add_game(exe)
+endif()

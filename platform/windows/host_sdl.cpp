@@ -72,6 +72,8 @@ int g_points_h = 0;
 int g_pixels_w = 0;
 int g_pixels_h = 0;
 int g_fit_tries = 0;
+int g_borderless = 0;
+int g_focus_tries = 0;
 bool g_bgfx_ok = false;
 
 #if BX_PLATFORM_WINDOWS
@@ -146,6 +148,11 @@ void to_game_pixels(int x, int y, int* ox, int* oy) {
 
 void fit_client_pixels() {
     if (!g_window || g_want_w <= 0 || g_want_h <= 0) return;
+    // desktop already picked the size
+    if (g_borderless) {
+        read_window_sizes();
+        return;
+    }
     read_window_sizes();
     if (g_pixels_w == g_want_w && g_pixels_h == g_want_h) {
         g_fit_tries = 0;
@@ -192,39 +199,73 @@ struct ShotCallback final : bgfx::CallbackI {
 };
 ShotCallback g_shot_callback;
 
-int sdl_to_vk(SDL_Keycode sym) {
+// physical key, not the letter the layout prints. russian йцукен still has to be wasd
+int sdl_to_vk(SDL_Keysym key) {
+    const SDL_Scancode sc = key.scancode;
+    if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z)
+        return int('A' + (sc - SDL_SCANCODE_A));
+    if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9)
+        return int('1' + (sc - SDL_SCANCODE_1));
+    if (sc == SDL_SCANCODE_0)
+        return int('0');
+    if (sc >= SDL_SCANCODE_F1 && sc <= SDL_SCANCODE_F12)
+        return 0x70 + int(sc - SDL_SCANCODE_F1);
+    switch (sc) {
+        case SDL_SCANCODE_LEFT: return 0x25;
+        case SDL_SCANCODE_UP: return 0x26;
+        case SDL_SCANCODE_RIGHT: return 0x27;
+        case SDL_SCANCODE_DOWN: return 0x28;
+        case SDL_SCANCODE_ESCAPE: return 0x1B;
+        case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: return 0x0D;
+        case SDL_SCANCODE_SPACE: return 0x20;
+        case SDL_SCANCODE_LSHIFT: case SDL_SCANCODE_RSHIFT: return 0x10;
+        case SDL_SCANCODE_LCTRL: case SDL_SCANCODE_RCTRL: return 0x11;
+        case SDL_SCANCODE_LALT: case SDL_SCANCODE_RALT: return 0x12;
+        case SDL_SCANCODE_TAB: return 0x09;
+        case SDL_SCANCODE_BACKSPACE: return 0x08;
+        case SDL_SCANCODE_DELETE: return 0x2E;
+        case SDL_SCANCODE_INSERT: return 0x2D;
+        case SDL_SCANCODE_HOME: return 0x24;
+        case SDL_SCANCODE_END: return 0x23;
+        case SDL_SCANCODE_PAGEUP: return 0x21;
+        case SDL_SCANCODE_PAGEDOWN: return 0x22;
+        case SDL_SCANCODE_PAUSE: return 0x13;
+        case SDL_SCANCODE_MINUS: return 0xBD;
+        case SDL_SCANCODE_EQUALS: return 0xBB;
+        case SDL_SCANCODE_LEFTBRACKET: return 0xDB;
+        case SDL_SCANCODE_RIGHTBRACKET: return 0xDD;
+        case SDL_SCANCODE_BACKSLASH: return 0xDC;
+        case SDL_SCANCODE_GRAVE: return 0xC0;
+        default: break;
+    }
+    const SDL_Keycode sym = key.sym;
     if (sym >= SDLK_a && sym <= SDLK_z) return int(sym - 32);
     if (sym >= SDLK_0 && sym <= SDLK_9) return int(sym);
-    if (sym >= SDLK_F1 && sym <= SDLK_F12) return 0x70 + int(sym - SDLK_F1);
-    switch (sym) {
-        case SDLK_LEFT: return 0x25;
-        case SDLK_UP: return 0x26;
-        case SDLK_RIGHT: return 0x27;
-        case SDLK_DOWN: return 0x28;
-        case SDLK_ESCAPE: return 0x1B;
-        case SDLK_RETURN: case SDLK_KP_ENTER: return 0x0D;
-        case SDLK_SPACE: return 0x20;
-        case SDLK_LSHIFT: case SDLK_RSHIFT: return 0x10;
-        case SDLK_LCTRL: case SDLK_RCTRL: return 0x11;
-        case SDLK_LALT: case SDLK_RALT: return 0x12;
-        case SDLK_TAB: return 0x09;
-        case SDLK_BACKSPACE: return 0x08;
-        case SDLK_DELETE: return 0x2E;
-        case SDLK_INSERT: return 0x2D;
-        case SDLK_HOME: return 0x24;
-        case SDLK_END: return 0x23;
-        case SDLK_PAGEUP: return 0x21;
-        case SDLK_PAGEDOWN: return 0x22;
-        case SDLK_PAUSE: return 0x13;
-        default: return 0;
-    }
+    return 0;
 }
 
 void push(uint32_t message, uintptr_t wparam, intptr_t lparam) {
     g_messages.push_back(SdlMsg{message, wparam, lparam});
 }
 
+void nudge_keyboard_focus() {
+    if (!g_window || g_focus_tries >= 40)
+        return;
+    if (SDL_GetKeyboardFocus() == g_window) {
+        g_focus_tries = 40;
+        return;
+    }
+    // peek is called in a burst, don't burn the retries before the window is mapped
+    static int pumps = 0;
+    if ((++pumps % 15) != 1)
+        return;
+    ++g_focus_tries;
+    SDL_RaiseWindow(g_window);
+    SDL_SetWindowInputFocus(g_window);
+}
+
 void pump() {
+    nudge_keyboard_focus();
     if (g_window) fit_client_pixels();
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -259,7 +300,7 @@ void pump() {
             to_game_pixels(x, y, &x, &y);
             push(MSG_MOUSEWHEEL, uintptr_t(uint32_t(int32_t(delta) << 16)), (y << 16) | (x & 0xffff));
         } else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
-            int vk = sdl_to_vk(event.key.keysym.sym);
+            int vk = sdl_to_vk(event.key.keysym);
             if (vk) push(event.type == SDL_KEYDOWN ? MSG_KEYDOWN : MSG_KEYUP, uintptr_t(vk), 0);
         }
     }
@@ -292,7 +333,8 @@ SDL_Window* make_window(const char* title, int w, int h, Uint32 flags) {
              flags, w, h, SDL_GetCurrentVideoDriver(), (void*)win, SDL_GetError());
     if (!win && (flags & SDL_WINDOW_OPENGL)) {
         std::cout << "SDL_CreateWindow flags " << flags << " failed: " << SDL_GetError() << ", retrying plain\n";
-        win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, SDL_WINDOW_SHOWN);
+        const Uint32 plain = SDL_WINDOW_SHOWN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
+        win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, plain);
         mg_trace("[mg] SDL_CreateWindow retry plain -> %p err=%s\n", (void*)win, SDL_GetError());
     }
     return win;
@@ -353,7 +395,7 @@ bool choice_usable(const RendererChoice& choice) {
 
 }  // namespace
 
-extern "C" int mg_sdl_open(const char* title, int width, int height) {
+extern "C" int mg_sdl_open(const char* title, int width, int height, int popup) {
     if (g_window) return 1;
     enable_dpi_awareness();
 #if BX_PLATFORM_WINDOWS
@@ -364,10 +406,29 @@ extern "C" int mg_sdl_open(const char* title, int width, int height) {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     SDL_version sdlv{};
     SDL_GetVersion(&sdlv);
-    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << std::endl;
+    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << " v48" << std::endl;
     const char* name = title && title[0] ? title : "MatrixGame";
-    const int w = width > 0 ? width : 1280;
-    const int h = height > 0 ? height : 720;
+    int w = width > 0 ? width : 1280;
+    int h = height > 0 ? height : 720;
+    SDL_DisplayMode desktop{};
+    if (SDL_GetDesktopDisplayMode(0, &desktop) != 0)
+        desktop.w = desktop.h = 0;
+    // popup means fullscreen even if the 2d size is under the desktop
+    bool fullscreen = popup || (desktop.w > 0 && w >= desktop.w && h >= desktop.h);
+    if (const char* forced = std::getenv("MG_FULLSCREEN"))
+        fullscreen = std::strcmp(forced, "0") != 0;
+    const int req_w = w;
+    const int req_h = h;
+    Uint32 fs_flags = 0;
+    if (fullscreen) {
+        fs_flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP;
+        if (desktop.w > 0 && desktop.h > 0) {
+            w = desktop.w;
+            h = desktop.h;
+        }
+    }
+    g_borderless = fullscreen ? 1 : 0;
+    g_focus_tries = 0;
 
     // Vulkan only. OpenGL drops robot shadow volumes
     constexpr RendererChoice kDefaultOrder[] = {
@@ -385,13 +446,24 @@ extern "C" int mg_sdl_open(const char* title, int width, int height) {
         count = sizeof(kNoopOnly) / sizeof(kNoopOnly[0]);
     }
     std::cout << "renderer request " << order[0].name
+              << " fullscreen " << g_borderless
+              << " " << w << "x" << h
               << " env " << (env ? env : "vk") << std::endl;
 
     bool ok = false;
     for (size_t i = 0; i < count && !ok; ++i) {
         const RendererChoice& choice = order[i];
         if (i != 0) std::cout << order[i - 1].name << " unusable, trying " << choice.name << std::endl;
-        if (!init_bgfx(name, w, h, choice.type, choice.flags)) continue;
+        if (!init_bgfx(name, w, h, choice.type, choice.flags | fs_flags)) {
+            if (!fullscreen) continue;
+            std::cout << "fullscreen window failed, retrying windowed" << std::endl;
+            fs_flags = 0;
+            g_borderless = 0;
+            w = req_w;
+            h = req_h;
+            fullscreen = false;
+            if (!init_bgfx(name, w, h, choice.type, choice.flags)) continue;
+        }
         // Validate the backend bgfx returned, not the one we asked for
         if (choice_usable(choice)) {
             ok = true;
@@ -416,20 +488,17 @@ extern "C" void mg_sdl_size(int* width, int* height) {
     if (height) *height = h;
 }
 
-// close the SDL window and the device
+// close the window and the device, leave sdl up
+// quitting would reinit video next time and ChangeDisplaySettings on the host
 extern "C" void mg_sdl_close(void) {
     mgfx_shutdown_device();
     g_bgfx_ok = false;
     if (g_window) {
-        SDL_SetWindowFullscreen(g_window, 0);
         SDL_DestroyWindow(g_window);
         g_window = nullptr;
     }
-#if BX_PLATFORM_WINDOWS
-    SDL_UnregisterApp();
-#endif
     if (SDL_WasInit(SDL_INIT_VIDEO))
-        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+        SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
     g_messages.clear();
     std::cout << "battle shutdown\n";
 }
@@ -447,6 +516,25 @@ extern "C" int mg_sdl_poll(uint32_t* message, uintptr_t* wparam, intptr_t* lpara
 
 extern "C" const char* mg_sdl_renderer_name(void) {
     return g_renderer.c_str();
+}
+
+extern "C" void mg_desktop_size(int* w, int* h) {
+    int dw = 0, dh = 0;
+    if (g_borderless && g_window)
+        SDL_GetWindowSizeInPixels(g_window, &dw, &dh);
+    if (dw <= 0 || dh <= 0) {
+        SDL_DisplayMode mode{};
+        if (SDL_WasInit(SDL_INIT_VIDEO) && SDL_GetDesktopDisplayMode(0, &mode) == 0) {
+            dw = mode.w;
+            dh = mode.h;
+        }
+    }
+    if (dw <= 0 || dh <= 0) {
+        dw = 1280;
+        dh = 720;
+    }
+    if (w) *w = dw;
+    if (h) *h = dh;
 }
 
 // Win32 ShowCursor returns a show/hide *count*, negative once hidden. The engine

@@ -138,8 +138,8 @@ ATOM RegisterClassExW(const WNDCLASSEXW* wc) {
     return 1;
 }
 
-HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD, int, int, int w, int h, HWND, void*, HINSTANCE, void*) {
-    mg_sdl_open(title, w, h);
+HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, int, int w, int h, HWND, void*, HINSTANCE, void*) {
+    mg_sdl_open(title, w, h, (style & 0x80000000u) ? 1 : 0);
     return reinterpret_cast<HWND>(static_cast<uintptr_t>(1));
 }
 

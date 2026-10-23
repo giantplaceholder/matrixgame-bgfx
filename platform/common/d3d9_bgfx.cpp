@@ -10,6 +10,7 @@
 #include "shader_bins.h"
 #include "shader_mod.h"
 #include "shader_atest.h"
+#include "shader_fog.h"
 
 #include <bgfx/bgfx.h>
 // blobs are GLSL, SPIR-V and DXBC, no DXIL
@@ -231,9 +232,12 @@ bgfx::ProgramHandle g_prog_col = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle g_prog_mod = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle g_prog_tex_at = BGFX_INVALID_HANDLE;
 bgfx::ProgramHandle g_prog_mod_at = BGFX_INVALID_HANDLE;
+bgfx::ProgramHandle g_prog_fog = BGFX_INVALID_HANDLE;
 bgfx::UniformHandle g_sampler = BGFX_INVALID_HANDLE;
 bgfx::UniformHandle g_sampler_mask = BGFX_INVALID_HANDLE;
 bgfx::UniformHandle g_mvp = BGFX_INVALID_HANDLE;
+bgfx::UniformHandle g_fog_u = BGFX_INVALID_HANDLE;
+bgfx::UniformHandle g_fog_color_u = BGFX_INVALID_HANDLE;
 bgfx::TextureHandle g_white = BGFX_INVALID_HANDLE;
 bgfx::VertexLayout g_layout;
 bgfx::VertexLayout g_layout_col;
@@ -344,6 +348,10 @@ const bgfx::EmbeddedShader kModAtFs[] = {
     BGFX_EMBEDDED_SHADER(fs_mod_at),
     BGFX_EMBEDDED_SHADER_END()
 };
+const bgfx::EmbeddedShader kFogFs[] = {
+    BGFX_EMBEDDED_SHADER(fs_fog),
+    BGFX_EMBEDDED_SHADER_END()
+};
 
 void ensure_views() {
     uint16_t w = uint16_t(g_ScreenX > 0 ? g_ScreenX : 1024);
@@ -402,9 +410,12 @@ void ensure_shaders() {
     // D3D11 has no DXBC blob, so this stays invalid and the draw keeps the plain program
     g_prog_tex_at = take_at(kTexVs, "vs_tex", kTexAtFs, "fs_tex_at");
     g_prog_mod_at = take_at(kModVs, "vs_mod", kModAtFs, "fs_mod_at");
+    g_prog_fog = take_at(kModVs, "vs_mod", kFogFs, "fs_fog");
     g_sampler = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler);
     g_sampler_mask = bgfx::createUniform("s_texMask", bgfx::UniformType::Sampler);
     g_mvp = bgfx::createUniform("u_mgModelViewPr", bgfx::UniformType::Mat4);
+    g_fog_u = bgfx::createUniform("u_fog", bgfx::UniformType::Vec4);
+    g_fog_color_u = bgfx::createUniform("u_fogColor", bgfx::UniformType::Vec4);
     g_layout.begin()
         .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
         .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
@@ -429,6 +440,7 @@ void ensure_shaders() {
         std::cout << "bgfx programs tex=" << g_prog_tex.idx << " col=" << g_prog_col.idx
                   << " mod=" << g_prog_mod.idx
                   << " tex_at=" << g_prog_tex_at.idx << " mod_at=" << g_prog_mod_at.idx
+                  << " fog=" << g_prog_fog.idx
                   << " renderer=" << bgfx::getRendererName(type) << "\n";
         if (!g_ready) logged_invalid = 1;
     }
@@ -818,6 +830,23 @@ uint32_t stencil_state() {
     return BGFX_STENCIL_FUNC_REF(g_stencil_ref & 0xffu) | BGFX_STENCIL_FUNC_RMASK(rmask) | test | fail | zfail | pass;
 }
 
+// d3d linear table fog, same fragment as the color
+// 2019 left it on so the map edge fades into the sky instead of a hole
+void set_table_fog(bool on) {
+    if (!bgfx::isValid(g_fog_u)) return;
+    float en = (on && g_fog && g_fog_end > g_fog_start + 1.f) ? 1.f : 0.f;
+    float p[4] = {g_fog_start, g_fog_end, en, 0.f};
+    bgfx::setUniform(g_fog_u, p);
+    if (!bgfx::isValid(g_fog_color_u)) return;
+    float c[4] = {
+        float((g_fog_color >> 16) & 255u) / 255.f,
+        float((g_fog_color >> 8) & 255u) / 255.f,
+        float(g_fog_color & 255u) / 255.f,
+        1.f,
+    };
+    bgfx::setUniform(g_fog_color_u, c);
+}
+
 void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcount, const void* indices, uint32_t start, uint32_t prim_count, bool index32, int base_vertex, uint32_t ib_bytes) {
     const bool screen = (g_fvf & 0x004) != 0;
     const bool rgb_write = (g_color_write & 7) != 0;
@@ -1055,6 +1084,7 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
         bgfx::setViewTransform(g_draw_view, idn, idn);
         bgfx::setTransform(idn);
         if (bgfx::isValid(g_mvp)) bgfx::setUniform(g_mvp, screen ? idn : mvp_row);
+        set_table_fog(!screen);
         if (transient) {
             bgfx::setVertexBuffer(0, &tvb);
             bgfx::setIndexBuffer(&tib);
@@ -1127,6 +1157,7 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
                     bgfx::setViewTransform(g_draw_view, idn, idn);
                     bgfx::setTransform(idn);
                     if (bgfx::isValid(g_mvp)) bgfx::setUniform(g_mvp, mvp_row);
+                    set_table_fog(true);
                     bgfx::setVertexBuffer(0, &mtb);
                     bgfx::setIndexBuffer(&mib);
                     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_LEQUAL
@@ -1137,65 +1168,6 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
                     scissor_subview();
                     bgfx::submit(g_draw_view, g_prog_mod);
                     ++g_macro;
-                }
-            }
-        }
-        // fog start/end are eye-space distances
-        if (!screen && g_fog && g_state_z && g_fog_end > g_fog_start + 1.f && bgfx::isValid(g_prog_mod) && bgfx::isValid(g_white)) {
-            static std::vector<uint8_t> fogv;
-            fogv.resize(size_t(out_count) * 24);
-            float max_a = 0.f;
-            float fog_start = g_fog_start;
-            float fog_end = g_fog_end;
-            // pull fog start in, the visible ground is closer than 2000
-            if (fog_end > 400.f && fog_start > fog_end * 0.35f) fog_start = fog_end * 0.28f;
-            const float span = fog_end - fog_start;
-            const uint8_t fr = uint8_t(g_fog_color >> 16);
-            const uint8_t fg = uint8_t(g_fog_color >> 8);
-            const uint8_t fb = uint8_t(g_fog_color);
-            for (uint32_t i = 0; i < out_count; ++i) {
-                float x, y, z;
-                std::memcpy(&x, vbytes + size_t(i) * out_stride, 4);
-                std::memcpy(&y, vbytes + size_t(i) * out_stride + 4, 4);
-                std::memcpy(&z, vbytes + size_t(i) * out_stride + 8, 4);
-                // eye-space distance comes from gl_Position.w
-                float ez = x * mvp_row[3] + y * mvp_row[7] + z * mvp_row[11] + mvp_row[15];
-                if (ez < 0.f) ez = -ez;
-                float f = (fog_end - ez) / span;
-                if (f < 0.f) f = 0.f;
-                if (f > 1.f) f = 1.f;
-                float a = 1.f - f;
-                if (a > max_a) max_a = a;
-                uint8_t* d = fogv.data() + size_t(i) * 24;
-                std::memcpy(d, &x, 4);
-                std::memcpy(d + 4, &y, 4);
-                std::memcpy(d + 8, &z, 4);
-                d[12] = fr; d[13] = fg; d[14] = fb; d[15] = uint8_t(a * 255.f);
-                float u = 0.f;
-                std::memcpy(d + 16, &u, 4);
-                std::memcpy(d + 20, &u, 4);
-            }
-            if (max_a > 0.03f && bgfx::getAvailTransientVertexBuffer(out_count, g_layout_mod) >= out_count
-                && bgfx::getAvailTransientIndexBuffer(uint32_t(ib.size())) >= ib.size()) {
-                bgfx::TransientVertexBuffer fvb;
-                bgfx::TransientIndexBuffer fib;
-                bgfx::allocTransientVertexBuffer(&fvb, out_count, g_layout_mod);
-                bgfx::allocTransientIndexBuffer(&fib, uint32_t(ib.size()));
-                if (fvb.data && fib.data) {
-                    std::memcpy(fvb.data, fogv.data(), fogv.size());
-                    std::memcpy(fib.data, ib.data(), ib.size() * sizeof(uint16_t));
-                    bgfx::setVertexBuffer(0, &fvb);
-                    bgfx::setIndexBuffer(&fib);
-                    bgfx::setTransform(idn);
-                    if (bgfx::isValid(g_mvp)) bgfx::setUniform(g_mvp, mvp_row);
-                    uint64_t fst = BGFX_STATE_WRITE_RGB | BGFX_STATE_DEPTH_TEST_LEQUAL
-                        | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA);
-                    if (lines) fst |= BGFX_STATE_PT_LINES;
-                    bgfx::setState(fst);
-                    bgfx::setTexture(0, g_sampler, g_white);
-                    if (bgfx::isValid(g_sampler_mask)) bgfx::setTexture(1, g_sampler_mask, g_white);
-                    scissor_subview();
-                    bgfx::submit(g_draw_view, g_prog_mod);
                 }
             }
         }
@@ -1217,9 +1189,12 @@ void reset_renderer_state() {
     g_prog_mod = BGFX_INVALID_HANDLE;
     g_prog_tex_at = BGFX_INVALID_HANDLE;
     g_prog_mod_at = BGFX_INVALID_HANDLE;
+    g_prog_fog = BGFX_INVALID_HANDLE;
     g_sampler = BGFX_INVALID_HANDLE;
     g_sampler_mask = BGFX_INVALID_HANDLE;
     g_mvp = BGFX_INVALID_HANDLE;
+    g_fog_u = BGFX_INVALID_HANDLE;
+    g_fog_color_u = BGFX_INVALID_HANDLE;
     g_white = BGFX_INVALID_HANDLE;
     g_texture = nullptr;
     g_mask_tex = nullptr;
@@ -1327,6 +1302,7 @@ void mgfx_draw_screen_rgba(int x, int y, int w, int h, const void* rgba, int pit
     bgfx::setViewTransform(VIEW_UI, idn, idn);
     bgfx::setTransform(idn);
     if (bgfx::isValid(g_mvp)) bgfx::setUniform(g_mvp, idn);
+    set_table_fog(false);
     bgfx::setVertexBuffer(0, &tvb);
     bgfx::setIndexBuffer(&tib);
     bgfx::setTexture(0, g_sampler, g_screen_image);
@@ -1338,6 +1314,13 @@ void mgfx_draw_screen_rgba(int x, int y, int w, int h, const void* rgba, int pit
 }
 
 extern "C" void mg_on_key(int vk, int down);
+
+// the old full-screen plate drew over the land
+// the clear in present() sits behind the world, that's where the sky color belongs
+long mgfx_begin_scene() {
+    return S_OK;
+}
+
 long mgfx_present() {
     ensure_shaders();
     ensure_views();
@@ -1345,8 +1328,18 @@ long mgfx_present() {
     bgfx::touch(VIEW_UI);
     // clear depth so LEQUAL terrain is not rejected, and stencil so volumes start from 0
     uint16_t bits = BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL;
+    uint32_t clear_rgba = g_clear_rgba;
     if (g_clear_color) bits |= BGFX_CLEAR_COLOR;
-    bgfx::setViewClear(VIEW_WORLD, bits, g_clear_rgba, 1.0f, 0);
+    else if (g_fog) {
+        // the game never clears color
+        // past the far corner that's a black hole under the map, use the fog color
+        bits |= BGFX_CLEAR_COLOR;
+        uint32_t fr = (g_fog_color >> 16) & 255u;
+        uint32_t fg = (g_fog_color >> 8) & 255u;
+        uint32_t fb = g_fog_color & 255u;
+        clear_rgba = (fr << 24) | (fg << 16) | (fb << 8) | 255u;
+    }
+    bgfx::setViewClear(VIEW_WORLD, bits, clear_rgba, 1.0f, 0);
     g_clear_color = false;
     bgfx::frame();
     ++g_frames;

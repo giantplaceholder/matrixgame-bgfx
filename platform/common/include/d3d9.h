@@ -21,6 +21,7 @@ struct IDirect3DVertexBuffer9;
 struct IDirect3DIndexBuffer9;
 struct IDirect3DSurface9;
 long mgfx_present();
+long mgfx_begin_scene();
 long mgfx_clear(uint32_t flags, uint32_t color, float z);
 void mgfx_set_render_state(uint32_t state, uint32_t value);
 void mgfx_set_tss(uint32_t stage, uint32_t type, uint32_t value);
@@ -101,6 +102,7 @@ constexpr uint32_t D3DRS_LIGHTING = 137;
 constexpr uint32_t D3DZB_TRUE = 1;
 
 struct D3DDISPLAYMODE { uint32_t Width, Height, RefreshRate, Format; };
+extern "C" void mg_desktop_size(int* w, int* h);
 struct D3DPRESENT_PARAMETERS {
     uint32_t BackBufferWidth, BackBufferHeight, BackBufferFormat, BackBufferCount;
     uint32_t MultiSampleType, MultiSampleQuality, SwapEffect, hDeviceWindow;
@@ -245,7 +247,7 @@ struct IDirect3DDevice9 {
     virtual ~IDirect3DDevice9() = default;
     virtual uint32_t Release() { return 0; }
     virtual long Present(const void*, const void*, HWND, const void*) { return mgfx_present(); }
-    virtual long BeginScene() { return S_OK; }
+    virtual long BeginScene() { return mgfx_begin_scene(); }
     virtual long EndScene() { return S_OK; }
     virtual long Clear(uint32_t count, const D3DRECT*, uint32_t flags, D3DCOLOR color, float z, uint32_t) {
         // A non-zero rect count is a partial clear (HUD). bgfx can only clear the whole view,
@@ -339,7 +341,12 @@ struct IDirect3DDevice9 {
         *out = s;
         return S_OK;
     }
-    virtual long GetDisplayMode(uint32_t, D3DDISPLAYMODE* mode) { if (mode) { mode->Width = 1280; mode->Height = 720; mode->RefreshRate = 60; mode->Format = D3DFMT_X8R8G8B8; } return S_OK; }
+    virtual long GetDisplayMode(uint32_t, D3DDISPLAYMODE* mode) {
+        int w = 1280, h = 720;
+        mg_desktop_size(&w, &h);
+        if (mode) { mode->Width = uint32_t(w); mode->Height = uint32_t(h); mode->RefreshRate = 60; mode->Format = D3DFMT_X8R8G8B8; }
+        return S_OK;
+    }
     virtual long SetVertexShaderConstantF(uint32_t, const float*, uint32_t) { return S_OK; }
     virtual long SetPixelShaderConstantF(uint32_t, const float*, uint32_t) { return S_OK; }
     virtual long SetVertexShader(void*) { return S_OK; }
@@ -349,7 +356,9 @@ struct IDirect3D9 {
     virtual ~IDirect3D9() = default;
     virtual uint32_t Release() { return 0; }
     virtual long GetAdapterDisplayMode(uint32_t, D3DDISPLAYMODE* mode) {
-        if (mode) { mode->Width = 1280; mode->Height = 720; mode->RefreshRate = 60; mode->Format = D3DFMT_X8R8G8B8; }
+        int w = 1280, h = 720;
+        mg_desktop_size(&w, &h);
+        if (mode) { mode->Width = uint32_t(w); mode->Height = uint32_t(h); mode->RefreshRate = 60; mode->Format = D3DFMT_X8R8G8B8; }
         return S_OK;
     }
     virtual long CreateDevice(uint32_t, uint32_t, HWND, uint32_t, D3DPRESENT_PARAMETERS*, IDirect3DDevice9** device);

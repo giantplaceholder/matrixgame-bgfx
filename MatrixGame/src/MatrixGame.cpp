@@ -324,9 +324,9 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
         CBlockPar *video_cfg = g_MatrixData->BlockGet(L"Config");
 #if !defined(BUILD_EXE)
         if (settings.m_ResolutionX > 0 && settings.m_ResolutionY > 0) {
-            // push the host resolution into the config L3GInitAsEXE reads
+            // host size is a request, fullscreen stays borderless on the desktop
             video_cfg->ParSetAdd(L"Resolution", utils::format(L"%d,%d", settings.m_ResolutionX, settings.m_ResolutionY));
-            video_cfg->ParSetAdd(L"FullScreen", L"0");
+            video_cfg->ParSetAdd(L"FullScreen", L"1");
         }
 #endif
         L3GInitAsEXE(inst, *video_cfg, L"MatrixGame", L"Matrix Game");
@@ -534,8 +534,8 @@ void CGame::Init(HINSTANCE inst, [[maybe_unused]] HWND wnd, const wchar *map,uin
 
     if (g_RangersInterface) {
         g_MatrixMap->m_Transition.BuildTexture();
-        // g_D3DD->Reset(&g_D3Dpp);
-        g_RangersInterface->m_Begin();
+        // m_Begin is ReleaseAllTextureSurfaces
+        // the old dll shared the host device, this window is ours so that call just kills host textures
     }
 
     /*IDirect3DSurface9 * surf;

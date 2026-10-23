@@ -218,15 +218,25 @@ void L3GInitAsEXE(HINSTANCE hinst, CBlockPar& bpcfg, const wchar* sysname, const
     }
 
     GetClientRect(g_Wnd, &tr);
-    if ((g_ScreenX != (tr.right - tr.left)) || (g_ScreenY != (tr.bottom - tr.top)))
+    const int client_w = (int)(tr.right - tr.left);
+    const int client_h = (int)(tr.bottom - tr.top);
+    // smaller 2d mode still covers the desktop, draw at the real client size
+    if (FLAG(g_Flags, GFLAG_FULLSCREEN) && client_w > 0 && client_h > 0 &&
+        (client_w != g_ScreenX || client_h != g_ScreenY))
+    {
+        lgr.debug("Fullscreen client {}x{} replaces requested {}x{}")(client_w, client_h, g_ScreenX, g_ScreenY);
+        g_ScreenX = client_w;
+        g_ScreenY = client_h;
+    }
+    else if ((g_ScreenX != client_w) || (g_ScreenY != client_h))
     {
         auto str =
             utils::format(
                 "Resolution error: expected %dx%d, actual %dx%d",
                 g_ScreenX,
                 g_ScreenY,
-                (int)(tr.right - tr.left),
-                (int)(tr.bottom - tr.top));
+                client_w,
+                client_h);
 
         lgr.error(str);
         ERROR_S(utils::to_wstring(str));

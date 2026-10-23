@@ -18,15 +18,15 @@ Let me be blunt: as is, this is a demo or maybe an alpha. Bugs may and will be e
 
 Tested and works:
 - Launching the planetary battle from the main menu of Space Rangers HD
+- Launching the battle as government quest: host game does not crash, player gets the award
 - Main gameplay loop (training map is finishable)
+- Big maps (they do not crash the game per se, but AI seems to crush me :)
 - Music and sound
 - Some additional effects like volume and stencil shadows
 - You can finish the battle in-game and start another after exiting it
 - End game stats
 
 What is not tested:
-- Big maps
-- Playing the battles as government quest
 - Tweaking planetary battle settings from the host game
 - Everything else I did not mention
 
@@ -34,9 +34,7 @@ Known issues/limitations:
 - No text or button captions in standalone (.exe) mode. At the moment this is by design: this version mirrors the behavior of the original MatrixGame from SR2\HD, and does not render any text bitmaps by itself, instead relying on host game to do that. The exe does run, though.
 - Anti-aliasing is not working yet
 - In exe mode, MatrixGame requires additional libraries to be present or linked, like SDL 2.0 or WinThreads implementation from MinGW - and looks for them next to itself. DLL carries all of them built-in.
-- Resolutions over 1080p might be borked at the moment. Game runs in borderless fullscreen, and on certain resolutions - even though it is DPI-aware - may show over the host Rangers.exe at the center of the screen. This will be debugged and fixed once I'll get back from vacation and get access to a bigger display.
 - The build process contains an enormous amount of warnings I didn't have time to clean up yet.
-- Build system rebuilds some of the shared components twice, to avoid stale cache. This is a precaution, but a redundant one. This will be addressed a bit later.
   
 # How to play this?
 

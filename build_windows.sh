@@ -163,40 +163,59 @@ copy_out() {
     sha256sum "$OUT/$2"
 }
 
+# -print-file-name misses arch, the dll lives in the mingw bin dir
+find_pthread_dll() {
+    local p a
+    p="$("$CXX_BIN" -print-file-name=libwinpthread-1.dll 2>/dev/null || true)"
+    if [[ -f "$p" ]]; then echo "$p"; return 0; fi
+    a="$("$CXX_BIN" -print-file-name=libwinpthread.dll.a 2>/dev/null || true)"
+    if [[ -f "$a" ]]; then
+        for p in "$(dirname "$a")/libwinpthread-1.dll" "$(dirname "$a")/../bin/libwinpthread-1.dll"; do
+            if [[ -f "$p" ]]; then echo "$p"; return 0; fi
+        done
+    fi
+    for p in "/usr/${MINGW_TRIPLET}/bin/libwinpthread-1.dll" "/usr/${MINGW_TRIPLET}/lib/libwinpthread-1.dll"; do
+        if [[ -f "$p" ]]; then echo "$p"; return 0; fi
+    done
+    return 1
+}
+
+log "configuring $MODE"
+configure_common "$WORK/build" "$MODE"
+cmake --build "$WORK/build" -j"$JOBS"
+
 if [[ "$MODE" == "exe" || "$MODE" == "both" ]]; then
-    log "configuring executable"
-    configure_common "$WORK/build-exe" exe
-    cmake --build "$WORK/build-exe" -j"$JOBS"
-    copy_out "$WORK/build-exe/matrixgame.exe" matrixgame.exe
+    copy_out "$WORK/build/matrixgame.exe" matrixgame.exe
     cp -f "$SDL_ROOT/$MINGW_TRIPLET/bin/SDL2.dll" "$OUT/SDL2.dll"
-    pthread_dll="$("$CXX_BIN" -print-file-name=libwinpthread-1.dll 2>/dev/null || true)"
-    if [[ -f "$pthread_dll" ]]; then
-        cp -f "$pthread_dll" "$OUT/libwinpthread-1.dll"
+    exe_imports="$(x86_64-w64-mingw32-objdump -p "$OUT/matrixgame.exe")"
+    if echo "$exe_imports" | grep -qi 'libwinpthread'; then
+        pthread_dll="$(find_pthread_dll || true)"
+        if [[ -n "${pthread_dll:-}" && -f "$pthread_dll" ]]; then
+            cp -f "$pthread_dll" "$OUT/libwinpthread-1.dll"
+        else
+            die "matrixgame.exe imports libwinpthread-1.dll and it was not found beside $CXX_BIN"
+        fi
     else
-        log "warning: libwinpthread-1.dll not found via $CXX_BIN"
+        rm -f "$OUT/libwinpthread-1.dll"
     fi
 fi
 
 if [[ "$MODE" == "dll" || "$MODE" == "both" ]]; then
-    log "configuring MatrixGame.dll"
-    configure_common "$WORK/build-dll" dll
-    cmake --build "$WORK/build-dll" -j"$JOBS"
-    copy_out "$WORK/build-dll/MatrixGame.dll" MatrixGame.dll
+    copy_out "$WORK/build/MatrixGame.dll" MatrixGame.dll
 
-    log "verifying the dll is self-contained"
-    deps="$(x86_64-w64-mingw32-objdump -p "$OUT/MatrixGame.dll" | awk '/^[[:space:]]+DLL Name:/{print $3}')"
+    dump="$(x86_64-w64-mingw32-objdump -p "$OUT/MatrixGame.dll")"
+    deps="$(echo "$dump" | awk '/^[[:space:]]+DLL Name:/{print $3}')"
     [[ -n "$deps" ]] || die "could not read the import table of MatrixGame.dll"
-    if echo "$deps" | grep -iE "SDL2|libpng|zlib|winpthread|stdc|gcc_s" >/dev/null; then
-        echo "$deps" >&2
+    bad="$(echo "$deps" | grep -iE 'SDL2|libpng|zlib|winpthread|stdc|gcc_s' || true)"
+    if [[ -n "$bad" ]]; then
+        echo "$bad" >&2
         die "MatrixGame.dll still imports SDL2/zlib/png/winpthreads"
     fi
-    log "dll imports only system dlls: $(echo "$deps" | tr '\n' ' ')"
-    exports="$(x86_64-w64-mingw32-objdump -p "$OUT/MatrixGame.dll" |
-        sed -n '/Ordinal\/Name Pointer/,$p' |
-        sed -n -E 's/^[[:space:]]*\[[[:space:]]*[0-9]+\][[:space:]]+([A-Za-z_][A-Za-z0-9_]*)$/\1/p')"
-    echo "$exports" | grep -qx "GetRobotInterface" ||
+    # binutils 2.43 added extra columns, match the name anywhere in the dump
+    if ! echo "$dump" | grep 'GetRobotInterface' >/dev/null; then
         die "MatrixGame.dll does not export GetRobotInterface"
-    log "dll exports: $(echo "$exports" | tr '\n' ' ')"
+    fi
+    log "MatrixGame.dll is self-contained and exports GetRobotInterface"
 fi
 
 log "artifacts in $OUT"

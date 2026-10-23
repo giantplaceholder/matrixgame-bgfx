@@ -253,10 +253,10 @@ void CMatrixConfig::SetDefaults(void) {
     m_KeyActions[KA_ROTATE_UP] = VK_PRIOR;
     m_KeyActions[KA_ROTATE_DOWN] = VK_NEXT;
 
-    m_KeyActions[KA_SCROLL_UP_ALT] = VK_UP;        // 0x57;
-    m_KeyActions[KA_SCROLL_DOWN_ALT] = VK_DOWN;    // 0x53;
-    m_KeyActions[KA_SCROLL_LEFT_ALT] = VK_LEFT;    // 0x41;
-    m_KeyActions[KA_SCROLL_RIGHT_ALT] = VK_RIGHT;  // 0x44;
+    m_KeyActions[KA_SCROLL_UP_ALT] = 0x57;     // w, arrows stay on the primary
+    m_KeyActions[KA_SCROLL_DOWN_ALT] = 0x53;   // s
+    m_KeyActions[KA_SCROLL_LEFT_ALT] = 0x41;   // a
+    m_KeyActions[KA_SCROLL_RIGHT_ALT] = 0x44;  // d
 
     m_KeyActions[KA_SCROLL_UP] = VK_UP;
     m_KeyActions[KA_SCROLL_DOWN] = VK_DOWN;
