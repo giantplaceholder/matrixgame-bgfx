@@ -22,7 +22,8 @@ jobs:
             g++-mingw-w64-x86-64-posix \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxfixes-dev libxrender-dev libxinerama-dev libxxf86vm-dev libxss-dev \
-            libgl1-mesa-dev libegl-dev libwayland-dev libasound2-dev
+            libgl1-mesa-dev libegl-dev libwayland-dev libwayland-bin libxkbcommon-dev \
+            libasound2-dev
 
       - name: linux
         run: bash ./build_linux.sh
