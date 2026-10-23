@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake curl ca-certificates pkg-config zip \
+            g++-mingw-w64-x86-64-posix \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxrender-dev libxinerama-dev libxxf86vm-dev libxss-dev \
+            libgl1-mesa-dev libegl-dev libwayland-dev libasound2-dev
+      - name: linux
+        run: ./build_linux.sh
+      - name: windows
+        run: ./build_windows.sh
+      - name: pack
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          tar -C out/linux/x86_64 -czf "dist/matrixgame-${tag}-linux-x86_64.tar.gz" matrixgame MatrixGame.so
+          (
+            cd out/windows/x86_64
+            zip -r "${GITHUB_WORKSPACE}/dist/matrixgame-${tag}-windows-x86_64.zip" \
+              matrixgame.exe MatrixGame.dll SDL2.dll
+          )
+      - name: upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* \
+              --title "${GITHUB_REF_NAME}" \
+              --notes "Linux and Windows builds."
+          fi
