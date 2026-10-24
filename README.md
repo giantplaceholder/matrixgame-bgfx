@@ -1,12 +1,14 @@
 # What is this?
 
-This repo contains a version of MatrixGame, 3D engine used in Space Rangers HD: A War Apart, modified to run both on Windows and Linux.
+This is a version of MatrixGame, a 3D engine used in Space Rangers HD: A War Apart planetary battles mode, modified to run on both Windows and Linux.
 
-In order to avoid a major engine re-write, this version uses [bgfx](https://github.com/bkaradzic/bgfx), translating native Direct3D calls to Vulkan. Input and system integration are handled by [SDL](https://github.com/libsdl-org/SDL).
+<img width="2560" height="1440" alt="Shot-2026-10-24-13-56-08-009" src="https://github.com/user-attachments/assets/03363876-591e-4250-87f7-b70395918abc" />
 
-Additionally, the engine has been updated to work natively on 64-bit platforms. 32-bit platform support has been dropped.
+(this screenshot has been captured in 2560x1440, with game running on Arch Linux)
 
-This project would not have been possible without the outstanding work of [murgesku](https://github.com/murgesku) and [vladislavrv](https://github.com/vladislavrv/MatrixGame), whom developed their versions of MatrixGame which became a base for this one.
+In order to avoid a major engine re-write, this version uses [bgfx](https://github.com/bkaradzic/bgfx), translating native Direct3D calls to Vulkan. Input and system integration are handled by [SDL](https://github.com/libsdl-org/SDL). Additionally, the engine has been updated to work natively on 64-bit platforms. 32-bit platform support has been dropped.
+
+This project would not have been possible without the outstanding work of [murgesku](https://github.com/murgesku) and [vladislavrv](https://github.com/vladislavrv/MatrixGame), whom developed their custom versions of the original MatrixGame, which became a base for this one.
 
 # Work in progress?
 
@@ -17,6 +19,7 @@ Let me be blunt: as is, this is a demo or maybe an alpha. Bugs may and will be e
 # What works/what doesn't?
 
 Tested and works:
+
 - Launching the planetary battle from the main menu of Space Rangers HD
 - Launching the battle as government quest: host game does not crash, player gets the reward
 - Finishing the battle in-game and start another after exiting it
@@ -27,9 +30,13 @@ Tested and works:
 - Stencil shadows, volume shadows, anisotropic filtering and anti-aliasing should work now
 
 What is not tested:
+
+- Multi-language support (don't have the time for it right now)
 - Everything else I did not mention
 
 Known issues/limitations:
+
+- There are still numbers of undebugged crashes on bigger maps
 - No text or button captions in standalone (.exe) mode. At the moment this is by design: this version mirrors the behavior of the original MatrixGame from SR2\HD, and does not render any text bitmaps by itself, instead relying on host game to do that. The exe does run, though.
 - In exe mode, MatrixGame requires additional libraries to be present or linked, like SDL 2.0 or WinThreads implementation from MinGW - and looks for them next to itself. DLL carries all of them built-in.
 - The build process contains an enormous amount of warnings I didn't have time to clean up yet.
@@ -47,9 +54,11 @@ Then build your own Rangers.exe as instructed, build your own MatrixGame as desc
 - Windows 10 or 11
 - Linux (any modern distro; tested on Ubuntu 24.04.4, Debian Trixie, Linux Mint Xia 22.1, Arch Linux/CachyOS, and SteamOS 3.8.26 on Steam Deck)
 
-Only 64-bit platforms are supported.
+Unlike the aforementioned custom version of Space Rangers HD 2D engine, this project does not support Windows 7. What this means specifically: binary will work, but there are a lot of Win7-specific bugs I don't have the time for right now.
 
-**PLEASE NOTE**: in this context, "supported client OS" means "the ones that I've tested this on". It is not an exhaustive list.
+Only 64-bit platforms are supported. I don't have any desire to support 32-bit platforms in late 2026, sorry.
+
+**PLEASE NOTE**: in this context, "supported client OS" means "the ones that I've tried to launch this on". It is not an exhaustive list.
 
 # How to build?
 
