@@ -135,6 +135,7 @@ void CMatrixEffectBillboard::Draw(const D3DXMATRIX &m, DWORD color, CTextureMana
     ASSERT_DX(g_D3DD->SetFVF(BBOARD_FVF));
 
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
+    ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, FALSE));
 

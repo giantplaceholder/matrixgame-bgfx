@@ -167,6 +167,7 @@ struct IDirect3DIndexBuffer9 {
 struct IDirect3DTexture9 {
     IDirect3DTexture9() { mgfx_track_texture(this, 1); }
     uint16_t bgfx_tex = 0xFFFF;
+    uint16_t bgfx_depth = 0xFFFF;
     uint16_t fb = 0xFFFF;
     uint32_t width = 1, height = 1;
     uint32_t format = 21;

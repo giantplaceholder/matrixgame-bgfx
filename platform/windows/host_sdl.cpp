@@ -131,8 +131,19 @@ void read_window_sizes() {
     g_pixels_w = g_want_w;
     g_pixels_h = g_want_h;
     if (!g_window) return;
-    SDL_GetWindowSize(g_window, &g_points_w, &g_points_h);
-    SDL_GetWindowSizeInPixels(g_window, &g_pixels_w, &g_pixels_h);
+    // hidden fullscreen window reports 0 the next battle
+    if (g_borderless) return;
+    int lw = 0, lh = 0, pw = 0, ph = 0;
+    SDL_GetWindowSize(g_window, &lw, &lh);
+    SDL_GetWindowSizeInPixels(g_window, &pw, &ph);
+    if (lw > 0 && lh > 0) {
+        g_points_w = lw;
+        g_points_h = lh;
+    }
+    if (pw > 0 && ph > 0) {
+        g_pixels_w = pw;
+        g_pixels_h = ph;
+    }
 }
 
 void to_game_pixels(int x, int y, int* ox, int* oy) {
@@ -284,15 +295,21 @@ void pump() {
             bool down = event.type == SDL_MOUSEBUTTONDOWN;
             bool dbl = down && event.button.clicks >= 2;
             uint32_t message = down ? MSG_LBUTTONDOWN : MSG_LBUTTONUP;
-            if (dbl) message = MSG_LBUTTONDBLCLK;
+            uint32_t extra = 0;
             if (event.button.button == SDL_BUTTON_RIGHT) {
-                message = down ? (dbl ? MSG_RBUTTONDBLCLK : MSG_RBUTTONDOWN) : MSG_RBUTTONUP;
+                message = down ? MSG_RBUTTONDOWN : MSG_RBUTTONUP;
+                if (dbl) extra = MSG_RBUTTONDBLCLK;
             } else if (event.button.button == SDL_BUTTON_MIDDLE) {
                 message = down ? MSG_MBUTTONDOWN : MSG_MBUTTONUP;
+            } else if (dbl) {
+                extra = MSG_LBUTTONDBLCLK;
             }
             int x = 0, y = 0;
             to_game_pixels(event.button.x, event.button.y, &x, &y);
-            push(message, 0, (y << 16) | (x & 0xffff));
+            intptr_t packed = (y << 16) | (x & 0xffff);
+            push(message, 0, packed);
+            // send the down too, fire listens for that
+            if (extra) push(extra, 0, packed);
         } else if (event.type == SDL_MOUSEWHEEL) {
             int delta = event.wheel.y * 120;
             int x = 0, y = 0;
@@ -328,12 +345,15 @@ void bind_native_window(bgfx::Init& init, SDL_Window* window) {
 }
 
 SDL_Window* make_window(const char* title, int w, int h, Uint32 flags) {
+    // hidden until the first frame
+    flags = (flags & ~SDL_WINDOW_SHOWN) | SDL_WINDOW_HIDDEN;
     SDL_Window* win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
+    if (win) SDL_ShowCursor(SDL_DISABLE);
     mg_trace("[mg] SDL_CreateWindow flags=0x%x %dx%d drv=%s -> %p err=%s\n",
              flags, w, h, SDL_GetCurrentVideoDriver(), (void*)win, SDL_GetError());
     if (!win && (flags & SDL_WINDOW_OPENGL)) {
         std::cout << "SDL_CreateWindow flags " << flags << " failed: " << SDL_GetError() << ", retrying plain\n";
-        const Uint32 plain = SDL_WINDOW_SHOWN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
+        const Uint32 plain = SDL_WINDOW_HIDDEN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
         win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, plain);
         mg_trace("[mg] SDL_CreateWindow retry plain -> %p err=%s\n", (void*)win, SDL_GetError());
     }
@@ -406,7 +426,7 @@ extern "C" int mg_sdl_open(const char* title, int width, int height, int popup) 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     SDL_version sdlv{};
     SDL_GetVersion(&sdlv);
-    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << " v51" << std::endl;
+    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << " v61" << std::endl;
     const char* name = title && title[0] ? title : "MatrixGame";
     int w = width > 0 ? width : 1280;
     int h = height > 0 ? height : 720;
@@ -482,8 +502,8 @@ extern "C" int mg_sdl_open(const char* title, int width, int height, int popup) 
 
 extern "C" void mg_sdl_size(int* width, int* height) {
     read_window_sizes();
-    const int w = g_pixels_w > 0 ? g_pixels_w : 1280;
-    const int h = g_pixels_h > 0 ? g_pixels_h : 720;
+    const int w = g_pixels_w > 0 ? g_pixels_w : (g_want_w > 0 ? g_want_w : 1280);
+    const int h = g_pixels_h > 0 ? g_pixels_h : (g_want_h > 0 ? g_want_h : 720);
     if (width) *width = w;
     if (height) *height = h;
 }
@@ -539,10 +559,20 @@ extern "C" void mg_desktop_size(int* w, int* h) {
 
 // Win32 ShowCursor returns a show/hide *count*, negative once hidden. The engine
 int mg_show_cursor(int show) {
-    static int count = 1;
+    static int count = -1;
     count = show ? 1 : -1;
-    if (!(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO)) return count;
-    const bool shown = SDL_ShowCursor(-1) == 1;
-    if (shown != (count >= 0)) SDL_ShowCursor(count >= 0 ? 1 : 0);
+    // os cursor stays off
+    if (SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO)
+        SDL_ShowCursor(SDL_DISABLE);
     return count;
+}
+
+extern "C" void mg_reveal_window(void) {
+    if (!g_window) return;
+    Uint32 flags = SDL_GetWindowFlags(g_window);
+    if (flags & SDL_WINDOW_HIDDEN) {
+        SDL_ShowWindow(g_window);
+        SDL_RaiseWindow(g_window);
+    }
+    SDL_ShowCursor(SDL_DISABLE);
 }

@@ -181,7 +181,8 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
         ASSERT_DX(g_D3DD->SetFVF(BILLBOARD_FVF));
 
         ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
-        ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
+        // alpha test ate the soft edge
+        ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
         ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHAREF, 0));
 
         ASSERT_DX(g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
@@ -191,7 +192,10 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
         SetAlphaOpAnyOrder(0, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE);
         SetColorOpDisable(1);
 
+        g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+        // z was clipping the cage
+        g_D3DD->SetRenderState(D3DRS_ZENABLE, FALSE);
 
         g_D3DD->SetStreamSource(0, GET_VB(m_VB), 0, sizeof(SBillboardVertex));
         ASSERT_DX(g_D3DD->SetIndices(GET_IB(m_IB)));
@@ -208,6 +212,7 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE));
     g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, TRUE));
+    g_D3DD->SetRenderState(D3DRS_ZENABLE, TRUE);
 
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHAREF, 0x08));
@@ -444,9 +449,12 @@ void CBillboard::DrawNow(const D3DXMATRIX &iview) {
     ASSERT_DX(g_D3DD->SetFVF(BILLBOARD_FVF));
 
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
+    ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, FALSE));
 
+    // leftover src blend made the glow solid
+    g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
     SetColorOpAnyOrder(0, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE);
@@ -583,9 +591,11 @@ void CBillboardLine::DrawNow(const D3DXVECTOR3 &campos) const
     ASSERT_DX(g_D3DD->SetFVF(BILLBOARD_FVF));
 
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
+    ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, FALSE));
 
+    g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
     SetColorOpAnyOrder(0, D3DTOP_MODULATE, D3DTA_TEXTURE, D3DTA_DIFFUSE);

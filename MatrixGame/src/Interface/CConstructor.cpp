@@ -253,9 +253,8 @@ void CConstructor::BeforeRender(void) {
     //   SinCos(za, &m_Robot->m_Forward.x, &m_Robot->m_Forward.y );
     m_Robot->m_HullForward = m_Robot->m_Forward;
     m_Robot->m_Forward.z = 0;
-    // za += 0.001f;
-    //   if (za > M_PI_MUL(2)) za -= M_PI_MUL(2);
-
+    // preview, skip the shadow
+    m_Robot->SetInterfaceDraw(true);
     m_Robot->RChange(MR_Matrix | MR_Graph);
     m_Robot->BeforeDraw();
 }

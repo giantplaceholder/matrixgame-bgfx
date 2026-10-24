@@ -194,6 +194,7 @@ static void invalidate_live_textures() {
     for (auto* t : g_live_tex) {
         if (!t) continue;
         t->bgfx_tex = 0xFFFF;
+        t->bgfx_depth = 0xFFFF;
         t->fb = 0xFFFF;
         t->rt_view = -1;
         t->rt_frame = -1;
@@ -1095,7 +1096,9 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
         bgfx::setViewTransform(g_draw_view, idn, idn);
         bgfx::setTransform(idn);
         if (bgfx::isValid(g_mvp)) bgfx::setUniform(g_mvp, screen ? idn : mvp_row);
-        set_table_fog(!screen);
+        // fog was painting additive sprites with the sky
+        const bool additive_fx = g_state_alpha && (g_blend_dst == D3DBLEND_ONE || g_blend_src == D3DBLEND_ONE);
+        set_table_fog(!screen && !additive_fx);
         if (transient) {
             bgfx::setVertexBuffer(0, &tvb);
             bgfx::setIndexBuffer(&tib);
@@ -1126,7 +1129,7 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
         if (textured && g_texture && bgfx::isValid(bgfx::TextureHandle{g_texture->bgfx_tex})) {
             uint32_t samp = 0;
             // 3 is anisotropic. a saved state of 0 used to force point and wipe this
-            const bool aniso = g_aniso >= 2 && (g_min_filter == 3 || g_mag_filter == 3);
+            const bool aniso = !g_state_alpha && g_aniso >= 2 && (g_min_filter == 3 || g_mag_filter == 3);
             const bool point = !aniso && g_min_filter <= 1 && g_mag_filter <= 1;
             if (aniso)
                 samp |= BGFX_SAMPLER_MIN_ANISOTROPIC | BGFX_SAMPLER_MAG_ANISOTROPIC;
@@ -1201,6 +1204,27 @@ void submit(uint32_t prim, const uint8_t* verts, uint32_t stride, uint32_t vcoun
     }
 }
 
+void reset_draw_state() {
+    g_vp = {};
+    g_rt = nullptr;
+    g_cpu_target = nullptr;
+    g_draw_view = VIEW_WORLD;
+    g_texture = nullptr;
+    g_mask_tex = nullptr;
+    for (int i = 0; i < 8; ++i) g_stages[i] = nullptr;
+    g_state_alpha = 0;
+    g_state_atest = 0;
+    g_alpha_ref = 0;
+    g_state_z = 1;
+    g_state_zwrite = 1;
+    g_cull = 3;
+    g_blend_src = D3DBLEND_SRCALPHA;
+    g_blend_dst = D3DBLEND_INVSRCALPHA;
+    g_color_write = 0xF;
+    g_stencil = 0;
+    g_fog = 0;
+}
+
 void reset_renderer_state() {
     // clear g_ready, the next battle must not reuse dead handles
     g_ready = false;
@@ -1216,9 +1240,7 @@ void reset_renderer_state() {
     g_fog_u = BGFX_INVALID_HANDLE;
     g_fog_color_u = BGFX_INVALID_HANDLE;
     g_white = BGFX_INVALID_HANDLE;
-    g_texture = nullptr;
-    g_mask_tex = nullptr;
-    for (int i = 0; i < 8; ++i) g_stages[i] = nullptr;
+    reset_draw_state();
     g_frames = 0;
     g_draws = 0;
     g_tex_draws = 0;
@@ -1227,9 +1249,11 @@ void reset_renderer_state() {
     g_pick0 = g_pick2 = g_pick_other = g_pick_none = g_macro = 0;
     g_vb = nullptr;
     g_ib = nullptr;
-    g_rt = nullptr;
-    g_cpu_target = nullptr;
-    g_draw_view = VIEW_WORLD;
+    // new device, the old size must not skip the next reset
+    g_applied_w = 0;
+    g_applied_h = 0;
+    g_applied_flags = 0xffffffffu;
+    g_applied_chain = 0xffffffffu;
     invalidate_live_textures();
     std::cout << "bgfx device reset\n";
 }
@@ -1245,6 +1269,8 @@ static int g_screen_h = 0;
 // bgfx::shutdown joins the render thread and frees the device
 void mgfx_shutdown_device() {
     if (bgfx::getCaps()) {
+        // finish the last frame, then drop the device so the host can draw again
+        bgfx::frame();
         if (bgfx::isValid(g_screen_image))
             bgfx::destroy(g_screen_image);
         g_screen_image = BGFX_INVALID_HANDLE;
@@ -1335,6 +1361,8 @@ void mgfx_draw_screen_rgba(int x, int y, int w, int h, const void* rgba, int pit
 
 extern "C" void mg_on_key(int vk, int down);
 
+extern "C" void mg_reveal_window(void);
+
 // the old full-screen plate drew over the land
 // the clear in present() sits behind the world, that's where the sky color belongs
 long mgfx_begin_scene() {
@@ -1362,6 +1390,7 @@ long mgfx_present() {
     bgfx::setViewClear(VIEW_WORLD, bits, clear_rgba, 1.0f, 0);
     g_clear_color = false;
     bgfx::frame();
+    mg_reveal_window();
     ++g_frames;
     if (g_frames <= 3 || (g_frames % 120) == 0) {
         std::cout << "frame " << g_frames << " draws " << g_draws << " textured " << g_tex_draws
@@ -1396,12 +1425,15 @@ static void ensure_rt_fb(IDirect3DTexture9* tex) {
         if (bgfx::isValid(depth)) break;
     }
     bgfx::FrameBufferHandle fb = BGFX_INVALID_HANDLE;
+    bool kept_depth = false;
     if (bgfx::isValid(depth)) {
         bgfx::TextureHandle att[2] = {color, depth};
         fb = bgfx::createFrameBuffer(2, att, false);
+        kept_depth = bgfx::isValid(fb);
     }
-    if (!bgfx::isValid(fb)) {
+    if (!kept_depth) {
         if (bgfx::isValid(depth)) bgfx::destroy(depth);
+        depth = BGFX_INVALID_HANDLE;
         fb = bgfx::createFrameBuffer(1, &color, false);
     }
     if (!bgfx::isValid(fb)) {
@@ -1411,6 +1443,7 @@ static void ensure_rt_fb(IDirect3DTexture9* tex) {
         return;
     }
     tex->bgfx_tex = color.idx;
+    tex->bgfx_depth = kept_depth ? depth.idx : uint16_t(0xFFFF);
     tex->fb = fb.idx;
     tex->is_rt = true;
     static int made = 0;
@@ -1807,17 +1840,58 @@ static void raster_cpu(uint32_t prim, const uint8_t* src, uint32_t stride, uint3
                     dst[3] = 255;
                     continue;
                 }
-                if (g_state_alpha && aa < 255) {
-                    uint32_t ia = aa;
-                    if (rgb_write) {
-                        dst[0] = uint8_t((r * ia + dst[0] * (255 - ia)) >> 8);
-                        dst[1] = uint8_t((g * ia + dst[1] * (255 - ia)) >> 8);
-                        dst[2] = uint8_t((bb * ia + dst[2] * (255 - ia)) >> 8);
-                    }
-                    if (alpha_write) dst[3] = uint8_t((aa * ia + dst[3] * (255 - ia)) >> 8);
-                } else {
+                if (!g_state_alpha) {
                     if (rgb_write) { dst[0] = r; dst[1] = g; dst[2] = bb; }
                     if (alpha_write) dst[3] = aa;
+                    continue;
+                }
+                // straight blend was pasting the glow onto the icon
+                auto factor = [](uint32_t mode, int s, int d, int sa, int da) -> int {
+                    switch (mode) {
+                    case D3DBLEND_ZERO: return 0;
+                    case D3DBLEND_ONE: return 255;
+                    case D3DBLEND_SRCCOLOR: return s;
+                    case D3DBLEND_INVSRCCOLOR: return 255 - s;
+                    case D3DBLEND_SRCALPHA: return sa;
+                    case D3DBLEND_INVSRCALPHA: return 255 - sa;
+                    case D3DBLEND_DESTALPHA: return da;
+                    case D3DBLEND_INVDESTALPHA: return 255 - da;
+                    case D3DBLEND_DESTCOLOR: return d;
+                    case D3DBLEND_INVDESTCOLOR: return 255 - d;
+                    default: return sa;
+                    }
+                };
+                const bool additive = g_blend_dst == D3DBLEND_ONE || g_blend_src == D3DBLEND_ONE;
+                if (rgb_write) {
+                    int sr = factor(g_blend_src, r, dst[0], aa, dst[3]);
+                    int dr = factor(g_blend_dst, r, dst[0], aa, dst[3]);
+                    int sg = factor(g_blend_src, g, dst[1], aa, dst[3]);
+                    int dg = factor(g_blend_dst, g, dst[1], aa, dst[3]);
+                    int sb = factor(g_blend_src, bb, dst[2], aa, dst[3]);
+                    int db = factor(g_blend_dst, bb, dst[2], aa, dst[3]);
+                    int nr = (int(r) * sr + int(dst[0]) * dr) >> 8;
+                    int ng = (int(g) * sg + int(dst[1]) * dg) >> 8;
+                    int nb = (int(bb) * sb + int(dst[2]) * db) >> 8;
+                    if (nr > 255) nr = 255;
+                    if (ng > 255) ng = 255;
+                    if (nb > 255) nb = 255;
+                    dst[0] = uint8_t(nr);
+                    dst[1] = uint8_t(ng);
+                    dst[2] = uint8_t(nb);
+                }
+                if (alpha_write) {
+                    if (additive) {
+                        int glow = r > g ? r : g;
+                        if (bb > glow) glow = bb;
+                        glow = (glow * int(aa)) >> 8;
+                        if (glow > int(dst[3])) dst[3] = uint8_t(glow);
+                    } else {
+                        int fa = factor(g_blend_src, aa, dst[3], aa, dst[3]);
+                        int fb = factor(g_blend_dst, aa, dst[3], aa, dst[3]);
+                        int na = (int(aa) * fa + int(dst[3]) * fb) >> 8;
+                        if (na > 255) na = 255;
+                        dst[3] = uint8_t(na);
+                    }
                 }
             }
         }
@@ -2022,6 +2096,19 @@ void mgfx_texture_upload(IDirect3DTexture9* tex) {
         }
         mem = bgfx::alloc(uint32_t(total));
         std::memcpy(mem->data, tex->rgba.data(), bytes);
+        // keep the bright core in the small mips
+        bool glow = tex->width <= 512 && tex->height <= 512;
+        if (glow) {
+            const uint32_t n = tex->width * tex->height;
+            uint32_t dark = 0, bright = 0;
+            for (uint32_t i = 0; i < n; ++i) {
+                const uint8_t* p = tex->rgba.data() + i * 4;
+                int sum = int(p[0]) + p[1] + p[2];
+                if (sum < 24) ++dark;
+                else if (sum > 400) ++bright;
+            }
+            glow = n && dark * 2 > n && bright * 30 > n;
+        }
         const uint8_t* src = mem->data;
         uint8_t* dst = mem->data + bytes;
         mw = tex->width;
@@ -2040,8 +2127,13 @@ void mgfx_texture_upload(IDirect3DTexture9* tex) {
                     const uint8_t* p01 = src + (size_t(y1) * mw + x0) * 4;
                     const uint8_t* p11 = src + (size_t(y1) * mw + x1) * 4;
                     uint8_t* o = dst + (size_t(y) * dw + x) * 4;
-                    for (int c = 0; c < 4; ++c)
-                        o[c] = uint8_t((int(p00[c]) + p10[c] + p01[c] + p11[c]) / 4);
+                    if (glow) {
+                        for (int c = 0; c < 4; ++c)
+                            o[c] = std::max(std::max(p00[c], p10[c]), std::max(p01[c], p11[c]));
+                    } else {
+                        for (int c = 0; c < 4; ++c)
+                            o[c] = uint8_t((int(p00[c]) + p10[c] + p01[c] + p11[c]) / 4);
+                    }
                 }
             }
             src = dst;

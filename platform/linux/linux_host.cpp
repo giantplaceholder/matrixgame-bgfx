@@ -330,11 +330,10 @@ BOOL QueryPerformanceFrequency(LARGE_INTEGER* frequency) {
 
 // Win32 ShowCursor returns a show/hide *count*, negative once hidden. The engine
 int mg_show_cursor(int show) {
-    static int count = 1;
+    static int count = -1;
     count = show ? 1 : -1;
-    if (!(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO)) return count;
-    const bool shown = SDL_ShowCursor(-1) == 1;
-    if (shown != (count >= 0)) SDL_ShowCursor(count >= 0 ? 1 : 0);
+    if (SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO)
+        SDL_ShowCursor(SDL_DISABLE);
     return count;
 }
 
@@ -555,14 +554,21 @@ void pump_sdl() {
             bool down = event.type == SDL_MOUSEBUTTONDOWN;
             bool dbl = down && event.button.clicks >= 2;
             msg.message = down ? WM_LBUTTONDOWN : WM_LBUTTONUP;
-            if (dbl) msg.message = WM_LBUTTONDBLCLK;
+            uint32_t extra = 0;
             if (event.button.button == SDL_BUTTON_RIGHT) {
-                msg.message = down ? (dbl ? WM_RBUTTONDBLCLK : WM_RBUTTONDOWN) : WM_RBUTTONUP;
+                msg.message = down ? WM_RBUTTONDOWN : WM_RBUTTONUP;
+                if (dbl) extra = WM_RBUTTONDBLCLK;
             } else if (event.button.button == SDL_BUTTON_MIDDLE) {
                 msg.message = down ? WM_MBUTTONDOWN : WM_MBUTTONUP;
+            } else if (dbl) {
+                extra = WM_LBUTTONDBLCLK;
             }
             msg.lParam = (event.button.y << 16) | (event.button.x & 0xffff);
             g_messages.push_back(msg);
+            if (extra) {
+                msg.message = extra;
+                g_messages.push_back(msg);
+            }
         } else if (event.type == SDL_MOUSEWHEEL) {
             msg.message = WM_MOUSEWHEEL;
             int delta = event.wheel.y * 120;
@@ -610,14 +616,24 @@ void bind_native_window(bgfx::Init& init, SDL_Window* window) {
 }
 
 SDL_Window* make_game_window(const char* title, int w, int h, Uint32 flags) {
+    // hidden until the first frame
+    flags = (flags & ~SDL_WINDOW_SHOWN) | SDL_WINDOW_HIDDEN;
     SDL_Window* win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
     if (!win && (flags & (SDL_WINDOW_VULKAN | SDL_WINDOW_OPENGL))) {
         std::cout << "SDL_CreateWindow flags " << flags << " failed: " << SDL_GetError() << ", retrying plain\n";
-        const Uint32 plain = SDL_WINDOW_SHOWN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
+        const Uint32 plain = SDL_WINDOW_HIDDEN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
         win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, plain);
     }
+    if (win) SDL_ShowCursor(SDL_DISABLE);
     return win;
 }
+}
+
+extern "C" void mg_reveal_window(void) {
+    if (!g_window) return;
+    Uint32 flags = SDL_GetWindowFlags(g_window);
+    if (flags & SDL_WINDOW_HIDDEN) SDL_ShowWindow(g_window);
+    SDL_ShowCursor(SDL_DISABLE);
 }
 
 void mg_set_command_line(int argc, char** argv) {
@@ -726,7 +742,7 @@ HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, in
         SDL_GetVersion(&sdlv);
         std::cout << "matrixgame-bgfx sdl "
                   << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch)
-                  << " v51" << std::endl;
+                  << " v61" << std::endl;
         std::string name = title ? title : "MatrixGame";
         int ww = w > 0 ? w : 1280;
         int hh = h > 0 ? h : 720;
@@ -778,7 +794,6 @@ HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, in
             g_window = make_game_window(name.c_str(), ww, hh, flags);
         }
         if (g_window) {
-            SDL_ShowWindow(g_window);
             SDL_RaiseWindow(g_window);
             SDL_SetWindowInputFocus(g_window);
             int aw = 0, ah = 0;
@@ -787,9 +802,7 @@ HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, in
                 ww = aw;
                 hh = ah;
             }
-            // separate SDL window, show its cursor
-            SDL_ShowCursor(1);
-            SDL_SetCursor(nullptr);
+            SDL_ShowCursor(SDL_DISABLE);
         }
         init.limits.maxTransientVbSize = 64u << 20;
         init.limits.maxTransientIbSize = 16u << 20;

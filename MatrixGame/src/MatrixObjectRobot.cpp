@@ -953,9 +953,12 @@ void CMatrixRobot::BeforeDraw(void) {
     if (IsMustDie())
         return;
 
-    // RNeed(MR_Matrix|MR_Graph|MR_GraphSort|MR_ShadowStencil|MR_ShadowProj);
-    DWORD sh = (g_Config.m_ShowProjShadows ? (MR_ShadowProjGeom | MR_ShadowProjTex) : 0) |
-               (g_Config.m_ShowStencilShadows ? MR_ShadowStencil : 0);
+    // shadow rebuild was hitching the constructor
+    DWORD sh = 0;
+    if (!IsInterfaceDraw()) {
+        sh = (g_Config.m_ShowProjShadows ? (MR_ShadowProjGeom | MR_ShadowProjTex) : 0) |
+             (g_Config.m_ShowStencilShadows ? MR_ShadowStencil : 0);
+    }
     RNeed(MR_Matrix | MR_Graph | sh);
 
     if (m_ShowHitpointTime > 0 && m_HitPoint > 0 && m_CurrState != ROBOT_DIP) {

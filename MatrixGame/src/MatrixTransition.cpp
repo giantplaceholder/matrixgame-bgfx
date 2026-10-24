@@ -26,6 +26,11 @@ void CTransition::Clear(void) {
 void CTransition::BuildTexture(void) {
     DTRACE();
 
+#ifdef MATRIXGAME_BGFX
+    // gdi blit is black here
+    return;
+#endif
+
     HDC hdc = GetDC(g_Wnd);
 
     RECT r;
@@ -173,6 +178,8 @@ void CTransition::Render(void) {
 }
 
 void CTransition::RenderToPrimaryScreen(void) {
+    if (m_Tex == NULL)
+        return;
     if (m_ScreenX != g_ScreenX || m_ScreenY != g_ScreenY) {
         float kx = float(double(g_ScreenX) / double(m_ScreenX));
         float ky = float(double(g_ScreenY) / double(m_ScreenY));
