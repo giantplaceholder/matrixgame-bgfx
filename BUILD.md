@@ -1,6 +1,6 @@
 # Building basics
 
-This document will tell you how to build binaries with patches from spacerangershd-fpc-fixes repo.
+This document will tell you how to build MatrixGame binaries from this repo.
 
 It assumes that you are somewhat of a power user, so we won't be covering the basics here.
 
