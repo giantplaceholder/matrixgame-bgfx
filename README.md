@@ -2,9 +2,10 @@
 
 This is a version of MatrixGame, a 3D engine used in Space Rangers HD: A War Apart planetary battles mode, modified to run on both Windows and Linux.
 
-<img width="2560" height="1440" alt="Shot-2026-10-24-13-56-08-009" src="https://github.com/user-attachments/assets/03363876-591e-4250-87f7-b70395918abc" />
+<p align=center><img width="2560" height="1440" alt="Shot-2026-10-24-13-56-08-009" src="https://github.com/user-attachments/assets/03363876-591e-4250-87f7-b70395918abc" /></p>
 
-(this screenshot has been captured in 2560x1440, with game running on Arch Linux)
+<p align=center>(this screenshot has been captured in 2560x1440, with game running on Arch Linux)<br />
+<strong><a href=https://www.youtube.com/watch?v=taUra2KYckM target=_blank>Live gameplay demo on YouTube</a></strong> (will open in a new tab)</p>
 
 In order to avoid a major engine re-write, this version uses [bgfx](https://github.com/bkaradzic/bgfx), translating native Direct3D calls to Vulkan. Input and system integration are handled by [SDL](https://github.com/libsdl-org/SDL). Additionally, the engine has been updated to work natively on 64-bit platforms. 32-bit platform support has been dropped.
 
