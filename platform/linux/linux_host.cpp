@@ -615,16 +615,35 @@ void bind_native_window(bgfx::Init& init, SDL_Window* window) {
               << " nwh " << init.swapChain.nwh << std::endl;
 }
 
+// bind MatrixGame window to primary monitor
+static void primary_pos(int w, int h, int* x, int* y) {
+    SDL_Rect b{};
+    if (SDL_GetDisplayBounds(0, &b) != 0) {
+        *x = SDL_WINDOWPOS_CENTERED;
+        *y = SDL_WINDOWPOS_CENTERED;
+        return;
+    }
+    *x = b.x + (b.w - w) / 2;
+    *y = b.y + (b.h - h) / 2;
+}
+
 SDL_Window* make_game_window(const char* title, int w, int h, Uint32 flags) {
     // hidden until the first frame
     flags = (flags & ~SDL_WINDOW_SHOWN) | SDL_WINDOW_HIDDEN;
-    SDL_Window* win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
+    int px = 0, py = 0;
+    primary_pos(w, h, &px, &py);
+    SDL_Window* win = SDL_CreateWindow(title, px, py, w, h, flags);
     if (!win && (flags & (SDL_WINDOW_VULKAN | SDL_WINDOW_OPENGL))) {
         std::cout << "SDL_CreateWindow flags " << flags << " failed: " << SDL_GetError() << ", retrying plain\n";
         const Uint32 plain = SDL_WINDOW_HIDDEN | (flags & (SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_FULLSCREEN));
-        win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, plain);
+        primary_pos(w, h, &px, &py);
+        win = SDL_CreateWindow(title, px, py, w, h, plain);
     }
-    if (win) SDL_ShowCursor(SDL_DISABLE);
+    if (win) {
+        SDL_ShowCursor(SDL_DISABLE);
+        primary_pos(w, h, &px, &py);
+        SDL_SetWindowPosition(win, px, py);
+    }
     return win;
 }
 }
@@ -742,7 +761,7 @@ HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, in
         SDL_GetVersion(&sdlv);
         std::cout << "matrixgame-bgfx sdl "
                   << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch)
-                  << " v61" << std::endl;
+                  << " v64" << std::endl;
         std::string name = title ? title : "MatrixGame";
         int ww = w > 0 ? w : 1280;
         int hh = h > 0 ? h : 720;
