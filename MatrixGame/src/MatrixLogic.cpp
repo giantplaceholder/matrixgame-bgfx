@@ -163,8 +163,6 @@ void CMatrixMapLogic::PrepareBuf() {
 int CMatrixMapLogic::ZoneFindNear(int nsh, int mx, int my) {
     DTRACE();
 
-    int i;
-
     SMatrixMapMove *smm = MoveGetTest(mx, my);
     if (!smm) {
         ERROR_E;
@@ -173,9 +171,25 @@ int CMatrixMapLogic::ZoneFindNear(int nsh, int mx, int my) {
     if (smm->m_Zone >= 0 && (nsh < 0 || !(smm->m_Stop & (1 << nsh))))
         return smm->m_Zone;
 
+    // if cell is blocked, take zone from a nearby walkable cell
+    for (int r = 1; r <= 24; r++) {
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                if (abs(dx) != r && abs(dy) != r)
+                    continue;
+                SMatrixMapMove *t = MoveGetTest(mx + dx, my + dy);
+                if (!t || t->m_Zone < 0)
+                    continue;
+                if (nsh >= 0 && (t->m_Stop & (1 << nsh)))
+                    continue;
+                return t->m_Zone;
+            }
+        }
+    }
+
     int mind = 1000000000;
     int minz = -1;
-    for (i = 0; i < m_RN.m_ZoneCnt; i++) {
+    for (int i = 0; i < m_RN.m_ZoneCnt; i++) {
         int d = (mx - m_RN.m_Zone[i].m_Center.x) * (mx - m_RN.m_Zone[i].m_Center.x) +
                 (my - m_RN.m_Zone[i].m_Center.y) * (my - m_RN.m_Zone[i].m_Center.y);
         if (d < mind) {
@@ -891,6 +905,32 @@ void CMatrixMapLogic::SetWeightFromTo(int size, int x1, int y1, int x2, int y2) 
     }
 }
 
+// reject all near-vertical steps between cells
+static bool CanStepHeight(CMatrixMapLogic *map, int x1, int y1, int x2, int y2) {
+    float z1 = map->GetZ((x1 + 0.5f) * GLOBAL_SCALE_MOVE, (y1 + 0.5f) * GLOBAL_SCALE_MOVE);
+    float z2 = map->GetZ((x2 + 0.5f) * GLOBAL_SCALE_MOVE, (y2 + 0.5f) * GLOBAL_SCALE_MOVE);
+    return fabsf(z2 - z1) <= (GLOBAL_SCALE_MOVE * 1.75f);
+}
+
+// reject real cliffs or drop-offs between zone centers
+static bool CanZoneStep(CMatrixMapLogic *map, int zi1, int zi2) {
+    SMatrixMapZone &a = map->m_RN.m_Zone[zi1];
+    SMatrixMapZone &b = map->m_RN.m_Zone[zi2];
+    float x1 = a.m_Center.x * GLOBAL_SCALE_MOVE;
+    float y1 = a.m_Center.y * GLOBAL_SCALE_MOVE;
+    float x2 = b.m_Center.x * GLOBAL_SCALE_MOVE;
+    float y2 = b.m_Center.y * GLOBAL_SCALE_MOVE;
+    float prev = map->GetZ(x1, y1);
+    for (int i = 1; i <= 12; i++) {
+        float t = float(i) / 12.0f;
+        float z = map->GetZ(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+        if (fabsf(z - prev) > GLOBAL_SCALE_MOVE * 3.0f)
+            return false;
+        prev = z;
+    }
+    return true;
+}
+
 int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Начальная точка
                                    int *zonepath, int zonepathcnt,  // Список зон через которые нужной найти путь
                                    int dx, int dy,   // Точка назначения
@@ -917,7 +957,7 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     if (!m_MapPoint)
         m_MapPoint = (CPoint *)HAlloc(m_SizeMove.x * m_SizeMove.y * sizeof(CPoint), g_MatrixHeap);
 
-    int zoneskipcnt = std::min(zonepathcnt - 1, 6);
+    int zoneskipcnt = std::min(zonepathcnt - 1, 12);
 
     CRect re = m_RN.m_Zone[zonepath[zoneskipcnt]].m_Rect;
     for (i = 0; i < zoneskipcnt; i++) {
@@ -928,13 +968,11 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     re.right = std::max(mx + 1, re.right);
     re.bottom = std::max(my + 1, re.bottom);
 
-    // last path chunk has to include the clicked cell
-    if (zonepathcnt <= 7) {
-        re.left = std::min(re.left, dx);
-        re.top = std::min(re.top, dy);
-        re.right = std::max(re.right, dx + 1);
-        re.bottom = std::max(re.bottom, dy + 1);
-    }
+    // we need to always try to find a walkable path towards the clicked cell
+    re.left = std::min(re.left, dx);
+    re.top = std::min(re.top, dy);
+    re.right = std::max(re.right, dx + 1);
+    re.bottom = std::max(re.bottom, dy + 1);
 
     re.left = std::max(re.left - size, 0);
     re.top = std::max(re.top - size, 0);
@@ -1057,6 +1095,9 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
             if (sme != 0 && smm->m_Stop & nsh_mask) {
                 continue;
             }
+            // skip near-vertical drops from cell to cell
+            if (sme != 0 && !CanStepHeight(this, m_MapPoint[sme].x, m_MapPoint[sme].y, tp.x, tp.y))
+                continue;
             if (smm->m_Find >= 0 && (smm2->m_Find + smm->m_Weight) >= smm->m_Find)
                 continue;
 
@@ -1109,9 +1150,15 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     }
 
     if (!findok) {
-        if (tpclose.x == mx && tpclose.y == my)
+        // if we're still walking through zones - keep moving toward the next one
+        if ((zoneskipcnt + 1) < zonepathcnt) {
+            if (tpclose.x == mx && tpclose.y == my)
+                return 0;
+            tpfind = tpclose;
+        } else {
+            // if path to final cell is blocked - do not walk into the obstacle
             return 0;
-        tpfind = tpclose;
+        }
     }
 
     cnt = 0;
@@ -1286,6 +1333,8 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
             if (zone->m_NearZoneMove[i] & (1 << nsh))
                 continue;
             newzone = zone->m_NearZone[i];
+            if (!CanZoneStep(this, m_ZoneIndex[sme], newzone))
+                continue;
             zone2 = m_RN.m_Zone + newzone;
             if (newzone == zstart || zone2->m_Access) {  // Нашли
                 zonefindok = newzone;
