@@ -909,27 +909,9 @@ void CMatrixMapLogic::SetWeightFromTo(int size, int x1, int y1, int x2, int y2) 
 static bool CanStepHeight(CMatrixMapLogic *map, int x1, int y1, int x2, int y2) {
     float z1 = map->GetZ((x1 + 0.5f) * GLOBAL_SCALE_MOVE, (y1 + 0.5f) * GLOBAL_SCALE_MOVE);
     float z2 = map->GetZ((x2 + 0.5f) * GLOBAL_SCALE_MOVE, (y2 + 0.5f) * GLOBAL_SCALE_MOVE);
-    return fabsf(z2 - z1) <= (GLOBAL_SCALE_MOVE * 1.75f);
+    return fabsf(z2 - z1) <= (GLOBAL_SCALE_MOVE * 1.25f);
 }
 
-// reject real cliffs or drop-offs between zone centers
-static bool CanZoneStep(CMatrixMapLogic *map, int zi1, int zi2) {
-    SMatrixMapZone &a = map->m_RN.m_Zone[zi1];
-    SMatrixMapZone &b = map->m_RN.m_Zone[zi2];
-    float x1 = a.m_Center.x * GLOBAL_SCALE_MOVE;
-    float y1 = a.m_Center.y * GLOBAL_SCALE_MOVE;
-    float x2 = b.m_Center.x * GLOBAL_SCALE_MOVE;
-    float y2 = b.m_Center.y * GLOBAL_SCALE_MOVE;
-    float prev = map->GetZ(x1, y1);
-    for (int i = 1; i <= 12; i++) {
-        float t = float(i) / 12.0f;
-        float z = map->GetZ(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
-        if (fabsf(z - prev) > GLOBAL_SCALE_MOVE * 3.0f)
-            return false;
-        prev = z;
-    }
-    return true;
-}
 
 int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Начальная точка
                                    int *zonepath, int zonepathcnt,  // Список зон через которые нужной найти путь
@@ -968,16 +950,25 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     re.right = std::max(mx + 1, re.right);
     re.bottom = std::max(my + 1, re.bottom);
 
-    // we need to always try to find a walkable path towards the clicked cell
+    // include the click
     re.left = std::min(re.left, dx);
     re.top = std::min(re.top, dy);
     re.right = std::max(re.right, dx + 1);
     re.bottom = std::max(re.bottom, dy + 1);
 
-    re.left = std::max(re.left - size, 0);
-    re.top = std::max(re.top - size, 0);
-    re.right = std::min(re.right + size, m_SizeMove.x - size);
-    re.bottom = std::min(re.bottom + size, m_SizeMove.y - size);
+    // if final route leg or no zone route
+    if (zonepathcnt <= 1 || zoneskipcnt + 1 >= zonepathcnt) {
+        re.left = 0;
+        re.top = 0;
+        re.right = m_SizeMove.x - size;
+        re.bottom = m_SizeMove.y - size;
+    } else {
+        int margin = std::max(64, std::max(abs(dx - mx), abs(dy - my)) + 32);
+        re.left = std::max(re.left - margin, 0);
+        re.top = std::max(re.top - margin, 0);
+        re.right = std::min(re.right + margin, m_SizeMove.x - size);
+        re.bottom = std::min(re.bottom + margin, m_SizeMove.y - size);
+    }
 
     ASSERT(!re.IsEmpty());
 
@@ -985,7 +976,8 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     for (y = re.top; y < re.bottom; y++, smm += m_SizeMove.x - (re.right - re.left)) {
         for (x = re.left; x < re.right; x++, smm++) {
             smm->m_Find = -1;
-            smm->m_Weight = 5;
+            // paths through slopes, hills and uneven cells are expensive, so this forces bots to go around obstacles
+            smm->m_Weight = (smm->m_Stop & (1 << nsh)) ? 80 : 5;
         }
     }
 
@@ -1129,7 +1121,18 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
             if (cnt >= maxmax)
                 break;
 
-            smm->m_Find = smm2->m_Find + smm->m_Weight;
+            int hcost = 0;
+            if (sme != 0) {
+                float z1 = GetZ((m_MapPoint[sme].x + 0.5f) * GLOBAL_SCALE_MOVE,
+                                (m_MapPoint[sme].y + 0.5f) * GLOBAL_SCALE_MOVE);
+                float z2 = GetZ((tp.x + 0.5f) * GLOBAL_SCALE_MOVE, (tp.y + 0.5f) * GLOBAL_SCALE_MOVE);
+                float dz = fabsf(z2 - z1);
+                if (dz > GLOBAL_SCALE_MOVE * 0.4f)
+                    hcost = 20;
+                if (dz > GLOBAL_SCALE_MOVE * 0.8f)
+                    hcost = 60;
+            }
+            smm->m_Find = smm2->m_Find + smm->m_Weight + hcost;
             m_MapPoint[cnt] = tp;
             cnt++;
             if (!findok) {
@@ -1333,8 +1336,6 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
             if (zone->m_NearZoneMove[i] & (1 << nsh))
                 continue;
             newzone = zone->m_NearZone[i];
-            if (!CanZoneStep(this, m_ZoneIndex[sme], newzone))
-                continue;
             zone2 = m_RN.m_Zone + newzone;
             if (newzone == zstart || zone2->m_Access) {  // Нашли
                 zonefindok = newzone;

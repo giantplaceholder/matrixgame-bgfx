@@ -447,7 +447,7 @@ extern "C" int mg_sdl_open(const char* title, int width, int height, int popup) 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
     SDL_version sdlv{};
     SDL_GetVersion(&sdlv);
-    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << " v65" << std::endl;
+    std::cout << "matrixgame-bgfx sdl " << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch) << " v67" << std::endl;
     const char* name = title && title[0] ? title : "MatrixGame";
     int w = width > 0 ? width : 1280;
     int h = height > 0 ? height : 720;
