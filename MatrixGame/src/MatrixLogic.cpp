@@ -165,7 +165,7 @@ int CMatrixMapLogic::ZoneFindNear(int nsh, int mx, int my) {
 
     SMatrixMapMove *smm = MoveGetTest(mx, my);
     if (!smm) {
-        ERROR_E;
+        return -1;
     }
 
     if (smm->m_Zone >= 0 && (nsh < 0 || !(smm->m_Stop & (1 << nsh))))
@@ -199,7 +199,7 @@ int CMatrixMapLogic::ZoneFindNear(int nsh, int mx, int my) {
     }
 
     if (minz < 0)
-        ERROR_E;
+        return -1;
 
     return minz;
 }
@@ -804,7 +804,7 @@ continue;
             else if(wtp<=wtp_) { nz_=nz; wtp_=wtp; }
         }
         if(nz_<0) {
-            ERROR_E;
+            return 0;
         }
 
         curzone=nz_;
@@ -933,13 +933,19 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
 #ifdef _DEBUG
         debugbreak();
 #endif
-        ERROR_E;
+        return 0;
     }
 
     if (!m_MapPoint)
         m_MapPoint = (CPoint *)HAlloc(m_SizeMove.x * m_SizeMove.y * sizeof(CPoint), g_MatrixHeap);
 
     int zoneskipcnt = std::min(zonepathcnt - 1, 12);
+
+    for (i = 0; i <= zoneskipcnt; i++) {
+        int z = zonepath[i];
+        if (z < 0 || z >= m_RN.m_ZoneCnt)
+            return 0;
+    }
 
     CRect re = m_RN.m_Zone[zonepath[zoneskipcnt]].m_Rect;
     for (i = 0; i < zoneskipcnt; i++) {
@@ -1214,14 +1220,16 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
             smmbest = smm2;
         }
         if (!smmbest)
-            ERROR_E;
+            return 0;
 
         smm = smmbest;
         lastangle = anglebest;
         tpfind = tpbest;
 
+        // when path buffer is full, keep the prefix already stored
+        // stop and return what we have from dest side only if cnt>1 — prefer fail to repath
         if (MatrixPathMoveMax - 1 - cnt <= 0)
-            ERROR_E;
+            return 0;
         path[MatrixPathMoveMax - 1 - cnt] = tpfind;
         cnt++;
     }
@@ -1384,8 +1392,10 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
                     bestlevel = zone2->m_FPLevel;
                 }
             }
-            if (best < 0)
-                ERROR_E;
+            if (best < 0) {
+                SetZoneAccess(m_ZoneIndexAccess, accesscnt, false);
+                return 0;
+            }
             curzone = best;
             path[cnt] = best;
             cnt++;
@@ -1434,8 +1444,10 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
                     break;
                 }
             }
-            if (!ok /*i>=zone->m_NearZoneCnt*/)
-                ERROR_E;
+            if (!ok /*i>=zone->m_NearZoneCnt*/) {
+                SetZoneAccess(m_ZoneIndexAccess, accesscnt, false);
+                return 0;
+            }
         }
     }
 
@@ -1523,8 +1535,10 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
                     break;
                 }
             }
-            if (!ok /*i>=zone->m_NearZoneCnt*/)
-                ERROR_E;
+            if (!ok /*i>=zone->m_NearZoneCnt*/) {
+                SetZoneAccess(m_ZoneIndexAccess, accesscnt, false);
+                return 0;
+            }
         }
     }
 
@@ -1637,8 +1651,10 @@ int CMatrixMapLogic::FindPathInZone(int nsh, int zstart, int zend, const CMatrix
                     bestlevel = zone2->m_FPLevel;
                 }
             }
-            if (best < 0)
-                ERROR_E;
+            if (best < 0) {
+                SetZoneAccess(m_ZoneIndexAccess, accesscnt, false);
+                return 0;
+            }
             curzone = best;
             path[cnt] = best;
             cnt++;
@@ -1659,8 +1675,9 @@ bool CMatrixMapLogic::CanMoveFromTo(int nsh, int size, int x1, int y1, int x2, i
     int sx = x2 >= x1 ? 1 : -1;
     int sy = y2 >= y1 ? m_SizeMove.x : -m_SizeMove.x;
 
-    SMatrixMapMove *smm = MoveGet(x1, y1);  // (BYTE *)bufdes+x1*4+y1*ll;
-                                            // 	SMatrixMapMove * smmt;
+    if (!MoveGetTest(x1, y1) || !MoveGetTest(x2, y2))
+        return false;
+    SMatrixMapMove *smm = MoveGet(x1, y1);
 
     ASSERT(size >= 1 && size <= 5);
     dword nsh_mask = (1 << nsh) << (6 * (size - 1));
@@ -1736,7 +1753,9 @@ bool CMatrixMapLogic::CanOptimize(int nsh, int size, int x1, int y1, int x2, int
     int sx = x2 >= x1 ? 1 : -1;
     int sy = y2 >= y1 ? m_SizeMove.x : -m_SizeMove.x;
 
-    SMatrixMapMove *smm = MoveGet(x1, y1);  // (BYTE *)bufdes+x1*4+y1*ll;
+    if (!MoveGetTest(x1, y1) || !MoveGetTest(x2, y2))
+        return false;
+    SMatrixMapMove *smm = MoveGet(x1, y1);
     SMatrixMapMove *smmt;
 
     ASSERT(size >= 1 && size <= 5);
@@ -1920,7 +1939,10 @@ int CMatrixMapLogic::RandomizeMovePath(int nsh, int size, int cnt, CPoint *path)
     int zonelast = -1;
 
     for (int i = 1; i < (cnt - 1); i++) {
-        int zonecur = MoveGet(path[i].x, path[i].y)->m_Zone;
+        SMatrixMapMove *zm = MoveGetTest(path[i].x, path[i].y);
+        if (!zm)
+            continue;
+        int zonecur = zm->m_Zone;
         if (zonelast == zonecur)
             continue;
         zonelast = zonecur;
@@ -1945,7 +1967,8 @@ int CMatrixMapLogic::RandomizeMovePath(int nsh, int size, int cnt, CPoint *path)
                 continue;
             if (newpx == path[i].x && newpy == path[i].y)
                 break;
-            if (zonecur != MoveGet(newpx, newpy)->m_Zone)
+            SMatrixMapMove *zn = MoveGetTest(newpx, newpy);
+            if (!zn || zonecur != zn->m_Zone)
                 continue;
 
             if (((newpx - path[i].x) * (newpx - path[i].x) + (newpy - path[i].y) * (newpy - path[i].y)) > dist2)
@@ -3060,8 +3083,9 @@ void CMatrixMapLogic::CalcCannonPlace(void) {
         if (obj->IsCannon()) {
             obj->AsCannon()->m_Place = m_RN.FindInPL(CPoint(Float2Int(obj->AsCannon()->m_Pos.x / GLOBAL_SCALE_MOVE),
                                                             Float2Int(obj->AsCannon()->m_Pos.y / GLOBAL_SCALE_MOVE)));
+            // do not fail outright, cannon logic can tolerate missing PL slot (review later?)
             if (obj->AsCannon()->m_Place < 0)
-                ERROR_E;  // Место не найдено
+                continue;
         }
         obj = obj->GetNextLogic();
     }

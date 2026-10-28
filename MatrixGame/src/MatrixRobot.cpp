@@ -638,9 +638,8 @@ void CMatrixRobotAI::LogicTakt(int ms) {
         m_CalcBoundsLastTime = g_MatrixMap->GetTime() - 10000;
 
         D3DXVECTOR3 vmin, vmax;
-        if (CalcBounds(vmin, vmax))
-            ERROR_E;
-        m_Core->m_GeoCenter = (vmin + vmax) * 0.5f;
+        if (!CalcBounds(vmin, vmax))
+            m_Core->m_GeoCenter = (vmin + vmax) * 0.5f;
 
         data.neardist2 = 1e30f;
         data.nearest = NULL;
@@ -1514,35 +1513,40 @@ void CMatrixRobotAI::ZoneCurFind() {
         return;
     }
     // cells under a base have no zone, fall back or the order aborts
-    if (smm)
+    if (smm) {
         m_ZoneCur = g_MatrixMap->ZoneFindNear(m_Unit[0].u1.s1.m_Kind - 1, m_MapX, m_MapY);
+        if (m_ZoneCur < 0)
+            m_ZoneCur = -1;
+    }
 }
 
 void CMatrixRobotAI::ZonePathCalc() {
     if (m_ZoneCur < 0)
         return;
+    if (m_ZoneDes < 0)
+        return;
     ASSERT(m_ZoneCur >= 0);
 
     if (!m_ZonePath)
         m_ZonePath = (int *)HAlloc(g_MatrixMap->m_RN.m_ZoneCnt * sizeof(int), g_MatrixHeap);
-    // 	m_ZonePathCnt=g_MatrixMap->ZoneFindPath(m_Unit[0].u1.s1.m_Kind-1,m_ZoneCur,m_ZoneDes,m_ZonePath);
 
     CMatrixSideUnit *side = g_MatrixMap->GetSideById(GetSide());
-    if (GetSide() == PLAYER_SIDE && GetGroupLogic() >= 0 &&
-        side->m_PlayerGroup[GetGroupLogic()].m_RoadPath->m_ListCnt > 0) {
-        m_ZonePathCnt = g_MatrixMap->FindPathInZone(m_Unit[0].u1.s1.m_Kind - 1, m_ZoneCur, m_ZoneDes,
-                                                    side->m_PlayerGroup[GetGroupLogic()].m_RoadPath, 0, m_ZonePath,
+    int gl = GetGroupLogic();
+    int team = GetTeam();
+    CMatrixRoadRoute *road = NULL;
+    if (side && GetSide() == PLAYER_SIDE && gl >= 0 && gl < MAX_LOGIC_GROUP &&
+        side->m_PlayerGroup[gl].m_RoadPath && side->m_PlayerGroup[gl].m_RoadPath->m_ListCnt > 0)
+        road = side->m_PlayerGroup[gl].m_RoadPath;
+    else if (side && GetSide() != PLAYER_SIDE && team >= 0 && team < MAX_LOGIC_GROUP &&
+             side->m_Team[team].m_RoadPath && side->m_Team[team].m_RoadPath->m_ListCnt > 0)
+        road = side->m_Team[team].m_RoadPath;
+
+    if (road)
+        m_ZonePathCnt = g_MatrixMap->FindPathInZone(m_Unit[0].u1.s1.m_Kind - 1, m_ZoneCur, m_ZoneDes, road, 0, m_ZonePath,
                                                     g_TestRobot == this);
-    }
-    else if (GetSide() != PLAYER_SIDE && GetTeam() >= 0 && side->m_Team[GetTeam()].m_RoadPath->m_ListCnt > 0) {
-        m_ZonePathCnt =
-                g_MatrixMap->FindPathInZone(m_Unit[0].u1.s1.m_Kind - 1, m_ZoneCur, m_ZoneDes,
-                                            side->m_Team[GetTeam()].m_RoadPath, 0, m_ZonePath, g_TestRobot == this);
-    }
-    else {
+    else
         m_ZonePathCnt = g_MatrixMap->FindPathInZone(m_Unit[0].u1.s1.m_Kind - 1, m_ZoneCur, m_ZoneDes, NULL, 0, m_ZonePath,
                                                     g_TestRobot == this);
-    }
     if (m_ZonePathCnt > 0) {
         ASSERT(m_ZonePathCnt >= 2);
         m_ZonePathNext = 1;
@@ -1551,8 +1555,10 @@ void CMatrixRobotAI::ZonePathCalc() {
         m_ZonePathNext = -1;
 
     if (GetSide() != PLAYER_SIDE && m_ZoneCur != m_ZoneDes &&
-        m_ZonePathCnt <= 0) {  // Если дойти не можем, то меняем команду
-        SetTeam(g_MatrixMap->GetSideById(GetSide())->ClacSpawnTeam(GetRegion(), m_Unit[0].u1.s1.m_Kind - 1));
+        m_ZonePathCnt <= 0) {
+        CMatrixSideUnit *s2 = g_MatrixMap->GetSideById(GetSide());
+        if (s2)
+            SetTeam(s2->ClacSpawnTeam(GetRegion(), m_Unit[0].u1.s1.m_Kind - 1));
         SetGroupLogic(-1);
     }
 }

@@ -2396,6 +2396,7 @@ int CMatrixRoadNetwork::FindPathInRegionRun(byte mm, int rstart, int rend, int *
     for (int i = 0; i < m_RegionCnt; i++, r++) {
         r->m_FPLevel = -1;
         r->m_FPWtp = 0;
+        r->m_FPWt = 1;  // Init was never called on the live path
     }
 
     int sme = 0;
@@ -2475,7 +2476,10 @@ int CMatrixRoadNetwork::FindPathInRegionRun(byte mm, int rstart, int rend, int *
             }
         }
         if (nr_ < 0) {
-            ERROR_E;
+            if (err)
+                ERROR_E;
+            else
+                return 0;
         }
 
         cr = nr_;

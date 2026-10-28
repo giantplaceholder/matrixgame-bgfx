@@ -27,7 +27,7 @@
 
 #define MAX_ALWAYS_DRAW_OBJ 16
 
-#define MatrixPathMoveMax 256
+#define MatrixPathMoveMax 512
 
 #define ROBOT_WEAPONS_PER_ROBOT_CNT 10
 #define ROBOT_MOVECELLS_PER_SIZE    4  // размер стороны квадрата робота в ячейках сетки проходимости
@@ -800,31 +800,31 @@ inline CMatrixSideUnit *CMatrixMap::GetSideById(int id) {
         if (m_Side[i].m_Id == id)
             return &m_Side[i];
     }
-#ifdef _DEBUG
-    debugbreak();
-#endif
-    ERROR_E;
+    return NULL;
 }
 
 inline DWORD CMatrixMap::GetSideColor(int id) {
     DTRACE();
     if (id == 0)
         return m_NeutralSideColor;
-    return GetSideById(id)->m_Color;
+    CMatrixSideUnit *s = GetSideById(id);
+    return s ? s->m_Color : m_NeutralSideColor;
 }
 
 inline DWORD CMatrixMap::GetSideColorMM(int id) {
     DTRACE();
     if (id == 0)
         return m_NeutralSideColorMM;
-    return GetSideById(id)->m_ColorMM;
+    CMatrixSideUnit *s = GetSideById(id);
+    return s ? s->m_ColorMM : m_NeutralSideColorMM;
 }
 
 inline CTexture *CMatrixMap::GetSideColorTexture(int id) {
     DTRACE();
     if (id == 0)
         return m_NeutralSideColorTexture;
-    return GetSideById(id)->m_ColorTexture;
+    CMatrixSideUnit *s = GetSideById(id);
+    return s ? s->m_ColorTexture : m_NeutralSideColorTexture;
 }
 
 inline float CMatrixMap::GetGroupMaxZLand(int x, int y) {

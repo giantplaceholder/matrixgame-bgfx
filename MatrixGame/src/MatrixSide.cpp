@@ -3700,7 +3700,7 @@ void CMatrixSideUnit::TaktHL() {
                    m_Team[i].m_RegionMass < 0 ? 0 : m_Region[m_Team[i].m_RegionMass].m_Danger,
                    m_Team[i].m_RegionNearDanger < 0 ? 0 : m_Region[m_Team[i].m_RegionNearDanger].m_Danger);
 
-            m_Team[i].m_RoadPath->ClearFast();
+            if (m_Team[i].m_RoadPath) m_Team[i].m_RoadPath->ClearFast();
             if (m_Team[i].m_Action.m_RegionPathCnt > 1) {
 #if (defined _DEBUG) && !(defined _RELDEBUG)
                 if (!g_TestLocal) {
@@ -8588,7 +8588,7 @@ int CMatrixSideUnit::SelGroupToLogicGroup() {
     m_PlayerGroup[no].Order(mpo_Stop);
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetWar(false);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     CMatrixGroupObject *objs = GetCurGroup()->m_FirstObject;
     while (objs) {
@@ -8628,7 +8628,7 @@ int CMatrixSideUnit::RobotToLogicGroup(CMatrixRobotAI *robot) {
     m_PlayerGroup[no].Order(mpo_Stop);
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetWar(false);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     m_PlayerGroup[no].m_RobotCnt++;
     robot->SetGroupLogic(no);
@@ -8644,7 +8644,7 @@ void CMatrixSideUnit::PGOrderStop(int no) {
     m_PlayerGroup[no].m_To = PGCalcCenterGroup(no);
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8694,7 +8694,7 @@ void CMatrixSideUnit::PGOrderMoveTo(int no, const CPoint &tp) {
     m_PlayerGroup[no].m_To = tp;
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8753,7 +8753,7 @@ void CMatrixSideUnit::PGOrderCapture(int no, CMatrixBuilding *building) {
     m_PlayerGroup[no].m_To = GetMapPos(building);
     m_PlayerGroup[no].m_Obj = building;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8809,7 +8809,7 @@ void CMatrixSideUnit::PGOrderAttack(int no, const CPoint &tp, CMatrixMapStatic *
     m_PlayerGroup[no].m_To = tp;
     m_PlayerGroup[no].m_Obj = terget_obj;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8899,7 +8899,7 @@ void CMatrixSideUnit::PGOrderPatrol(int no, const CPoint &tp) {
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetPatrolReturn(false);
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8935,7 +8935,7 @@ void CMatrixSideUnit::PGOrderRepair(int no, CMatrixMapStatic *terget_obj) {
     m_PlayerGroup[no].m_From = CPoint(-1, -1);
     m_PlayerGroup[no].m_Obj = terget_obj;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8954,7 +8954,7 @@ void CMatrixSideUnit::PGOrderBomb(int no, const CPoint &tp, CMatrixMapStatic *te
     m_PlayerGroup[no].m_To = tp;
     m_PlayerGroup[no].m_Obj = terget_obj;
     m_PlayerGroup[no].SetShowPlace(true);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -8995,7 +8995,7 @@ void CMatrixSideUnit::PGOrderAutoCapture(int no) {
     m_PlayerGroup[no].m_From = CPoint(-1, -1);
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetShowPlace(false);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 }
@@ -9022,7 +9022,7 @@ void CMatrixSideUnit::PGOrderAutoAttack(int no) {
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetShowPlace(false);
     m_PlayerGroup[no].m_Region = -1;
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -9088,7 +9088,7 @@ void CMatrixSideUnit::PGOrderAutoDefence(int no) {
     m_PlayerGroup[no].m_Obj = NULL;
     m_PlayerGroup[no].SetShowPlace(false);
     m_PlayerGroup[no].m_Region = g_MatrixMap->GetRegion(tp.x / cnt, tp.y / cnt);
-    m_PlayerGroup[no].m_RoadPath->Clear();
+    if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->Clear();
 
     PGRemoveAllPassive(no, m_PlayerGroup[no].m_Obj);
 
@@ -9636,7 +9636,7 @@ void CMatrixSideUnit::PGFindCaptureFactory(int no) {
                 m_PlayerGroup[no].m_Obj = obj;
 
                 m_PlayerGroup[no].m_RegionPathCnt = 0;
-                m_PlayerGroup[no].m_RoadPath->ClearFast();
+                if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
 
                 return;
             }
@@ -9701,7 +9701,7 @@ void CMatrixSideUnit::PGFindCaptureFactory(int no) {
                             m_PlayerGroup[no].m_Obj = obj;
                             PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
-                            m_PlayerGroup[no].m_RoadPath->ClearFast();
+                            if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
                             if (m_PlayerGroup[no].m_RegionPathCnt > 1) {
                                 g_MatrixMap->m_RN.FindPathFromRegionPath(mm, m_PlayerGroup[no].m_RegionPathCnt,
                                                                          m_PlayerGroup[no].m_RegionPath,
@@ -9761,7 +9761,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
             m_PlayerGroup[no].m_Obj = obj;
 
             m_PlayerGroup[no].m_RegionPathCnt = 0;
-            m_PlayerGroup[no].m_RoadPath->ClearFast();
+            if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
 
             return;
         }
@@ -9825,7 +9825,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
                             m_PlayerGroup[no].m_Obj = obj;
                             PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
-                            m_PlayerGroup[no].m_RoadPath->ClearFast();
+                            if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
                             if (m_PlayerGroup[no].m_RegionPathCnt > 1) {
                                 g_MatrixMap->m_RN.FindPathFromRegionPath(mm, m_PlayerGroup[no].m_RegionPathCnt,
                                                                          m_PlayerGroup[no].m_RegionPath,
@@ -9879,7 +9879,7 @@ void CMatrixSideUnit::PGFindAttackTarget(int no) {
                         m_PlayerGroup[no].m_Obj = obj;
                         PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
-                        m_PlayerGroup[no].m_RoadPath->ClearFast();
+                        if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
                         if (m_PlayerGroup[no].m_RegionPathCnt > 1) {
                             g_MatrixMap->m_RN.FindPathFromRegionPath(mm, m_PlayerGroup[no].m_RegionPathCnt,
                                                                      m_PlayerGroup[no].m_RegionPath,
@@ -9939,7 +9939,7 @@ void CMatrixSideUnit::PGFindDefenceTarget(int no) {
             m_PlayerGroup[no].m_Region = regionmass;
 
             m_PlayerGroup[no].m_RegionPathCnt = 0;
-            m_PlayerGroup[no].m_RoadPath->ClearFast();
+            if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
 
             return;
         }
@@ -10028,7 +10028,7 @@ void CMatrixSideUnit::PGFindDefenceTarget(int no) {
                                 m_PlayerGroup[no].m_Obj = obj;
                                 PGCalcRegionPath(m_PlayerGroup + no, u, mm);
 
-                                m_PlayerGroup[no].m_RoadPath->ClearFast();
+                                if (m_PlayerGroup[no].m_RoadPath) m_PlayerGroup[no].m_RoadPath->ClearFast();
                                 if (m_PlayerGroup[no].m_RegionPathCnt > 1) {
                                     g_MatrixMap->m_RN.FindPathFromRegionPath(mm, m_PlayerGroup[no].m_RegionPathCnt,
                                                                              m_PlayerGroup[no].m_RegionPath,

@@ -761,7 +761,7 @@ HWND CreateWindowExA(DWORD, const char*, const char* title, DWORD style, int, in
         SDL_GetVersion(&sdlv);
         std::cout << "matrixgame-bgfx sdl "
                   << int(sdlv.major) << "." << int(sdlv.minor) << "." << int(sdlv.patch)
-                  << " v67" << std::endl;
+                  << " v72" << std::endl;
         std::string name = title ? title : "MatrixGame";
         int ww = w > 0 ? w : 1280;
         int hh = h > 0 ? h : 720;
