@@ -124,7 +124,8 @@ if [[ ! -f "$PREFIX/lib/libpng16.a" || ! -f "$PREFIX/lib/libzlibstatic.a" ]]; th
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_C_FLAGS="-Wno-old-style-definition"
     cmake --build "$WORK/zlib-build" --target install -j"$JOBS"
 
     cmake -S "$WORK/libpng" -B "$WORK/libpng-build" \

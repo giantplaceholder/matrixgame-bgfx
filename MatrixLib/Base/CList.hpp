@@ -73,7 +73,7 @@ public:
 
     // -------------------------------------------------------//
 
-    inline T *ListSub(T *item) throw() { return static_cast<T *>(this->sub(item)); }
+    inline T *ListSub(T *item) throw() { return static_cast<T *>(this->Sub(item)); }
 
     // -------------------------------------------------------//
 

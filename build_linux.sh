@@ -111,7 +111,8 @@ build_pic_deps() {
     cmake -S "$WORK/zlib" -B "$WORK/zlib-build" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PIC_PREFIX" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-        -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_C_FLAGS="-Wno-old-style-definition"
     cmake --build "$WORK/zlib-build" --target install -j"$JOBS"
 
     cmake -S "$WORK/libpng" -B "$WORK/libpng-build" \

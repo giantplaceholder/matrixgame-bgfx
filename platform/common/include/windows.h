@@ -157,7 +157,7 @@ inline long RegCloseKey(HKEY) { return 0; }
 using HBITMAP = void*;
 using HICON = void*;
 using HCURSOR = void*;
-inline BOOL SetCursor(HCURSOR) { return TRUE; }
+inline HCURSOR SetCursor(HCURSOR) { return nullptr; }
 constexpr int VK_SPACE = 0x20;
 constexpr int VK_RETURN = 0x0d;
 constexpr int VK_SHIFT = 0x10;
@@ -229,7 +229,6 @@ inline BOOL DestroyIcon(HICON) { return TRUE; }
 // uninitialized path. A non-zero failure sends screenshots to .\Screenshots
 inline BOOL SHGetSpecialFolderLocation(HWND, int, ITEMIDLIST**) { return 1; }
 inline BOOL SHGetPathFromIDListW(ITEMIDLIST*, wchar_t* path) { if (path) path[0] = 0; return FALSE; }
-inline void* SetUnhandledExceptionFilter(void*) { return nullptr; }
 using HRSRC = void*;
 using HGLOBAL = void*;
 // Out of line on purpose. Inline constants let the compiler delete the
@@ -253,6 +252,8 @@ constexpr uint32_t DT_BOTTOM = 8;
 constexpr uint32_t DT_WORDBREAK = 0x10;
 struct EXCEPTION_POINTERS { void* ExceptionRecord; void* ContextRecord; };
 using PEXCEPTION_POINTERS = EXCEPTION_POINTERS*;
+using LPTOP_LEVEL_EXCEPTION_FILTER = long (__stdcall *)(PEXCEPTION_POINTERS);
+inline LPTOP_LEVEL_EXCEPTION_FILTER SetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER) { return nullptr; }
 constexpr long EXCEPTION_EXECUTE_HANDLER = 1;
 inline LONG SetWindowLong(HWND, int, LONG) { return 0; }
 inline BOOL UnionRect(RECT* out, const RECT*, const RECT*) { if (out) *out = {}; return TRUE; }
@@ -315,13 +316,12 @@ HANDLE FindFirstFileW(const wchar_t* name, WIN32_FIND_DATAW* data);
 BOOL FindNextFileA(HANDLE find, WIN32_FIND_DATAA* data);
 BOOL FindNextFileW(HANDLE find, WIN32_FIND_DATAW* data);
 BOOL FindClose(HANDLE find);
-BOOL QueryPerformanceCounter(union _LARGE_INTEGER* counter);
-BOOL QueryPerformanceFrequency(union _LARGE_INTEGER* frequency);
-
-struct _LARGE_INTEGER {
+union _LARGE_INTEGER {
     long long QuadPart;
 };
 using LARGE_INTEGER = _LARGE_INTEGER;
+BOOL QueryPerformanceCounter(LARGE_INTEGER* counter);
+BOOL QueryPerformanceFrequency(LARGE_INTEGER* frequency);
 DWORD timeGetTime();
 
 struct BITMAPV4HEADER {

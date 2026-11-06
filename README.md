@@ -13,7 +13,7 @@ This project would not have been possible without the outstanding work of [murge
 
 # Work in progress?
 
-Very much so. This has been hastily thrown together in under two weeks during my vacation. The last time I wrote anything in C or C++ was around 7-8 years ago, and complexity of the engine and some of the architectural decisions made by the original developers made it a way more harder enterprise than I originally thought.
+Very much so. This project began as a two-week crunch during my vacation. The last time I wrote anything in C or C++ was around 7-8 years ago, and complexity of the engine and some of the architectural decisions made by the original developers made it a way more harder enterprise than I originally thought.
 
 Let me be blunt: as is, this is a demo or maybe an alpha. Bugs may and will be encountered.
 
@@ -24,11 +24,12 @@ Tested and works:
 - Launching the planetary battle from the main menu of Space Rangers HD
 - Launching the battle as government quest: host game does not crash, player gets the reward
 - Finishing the battle in-game and start another after exiting it
-- Main gameplay loop works OK (training map is finishable)
-- Big maps load and run (they do not crash the game per se, but AI seems to crush me :)
-- End game stats are tracked properly
-- Music and sound play normally
-- Stencil shadows, volume shadows, anisotropic filtering and anti-aliasing should work now
+- Main gameplay loop (training map is finishable)
+- Most of the big maps load correctly and are finishable
+- AI and pathfinding (still a bit iffy, but largely works)
+- Music and sound effects
+- Stencil shadows, volume shadows, anisotropic filtering and anti-aliasing
+- Host game integration: briefings, start game\end game stats, etc
 
 What is not tested:
 
@@ -38,9 +39,9 @@ What is not tested:
 Known issues/limitations:
 
 - There are still numbers of undebugged crashes on bigger maps
+- Some params which are set by host game are ignored (resolution, for example - defaults to native)
+- Some graphical effects may appear buggy: explosions may seem too bright, some effect may clip through solid objects
 - No text or button captions in standalone (.exe) mode. At the moment this is by design: this version mirrors the behavior of the original MatrixGame from SR2\HD, and does not render any text bitmaps by itself, instead relying on host game to do that. The exe does run, though.
-- In exe mode, MatrixGame requires additional libraries to be present or linked, like SDL 2.0 or WinThreads implementation from MinGW - and looks for them next to itself. DLL carries all of them built-in.
-- The build process contains an enormous amount of warnings I didn't have time to clean up yet.
   
 # How to play this?
 

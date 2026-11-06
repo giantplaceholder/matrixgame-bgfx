@@ -108,7 +108,8 @@ struct D3DDISPLAYMODE { uint32_t Width, Height, RefreshRate, Format; };
 extern "C" void mg_desktop_size(int* w, int* h);
 struct D3DPRESENT_PARAMETERS {
     uint32_t BackBufferWidth, BackBufferHeight, BackBufferFormat, BackBufferCount;
-    uint32_t MultiSampleType, MultiSampleQuality, SwapEffect, hDeviceWindow;
+    uint32_t MultiSampleType, MultiSampleQuality, SwapEffect;
+    HWND hDeviceWindow;
     int Windowed, EnableAutoDepthStencil;
     uint32_t AutoDepthStencilFormat, Flags;
     uint32_t FullScreen_RefreshRateInHz, PresentationInterval;
