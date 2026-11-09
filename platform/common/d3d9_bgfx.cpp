@@ -31,6 +31,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <memory>
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -211,6 +212,9 @@ constexpr uint16_t VIEW_WORLD = 16;
 constexpr uint16_t VIEW_UI = 17;
 
 IDirect3DSurface9* g_rt = nullptr;
+static IDirect3DSurface9* g_depth_stencil = nullptr;
+static IDirect3DSurface9* g_default_bb = nullptr;
+
 IDirect3DSurface9* g_cpu_target = nullptr;
 void mgfx_begin_cpu_target(IDirect3DSurface9* surface) { g_cpu_target = surface; }
 void mgfx_end_cpu_target() { g_cpu_target = nullptr; }
@@ -553,10 +557,17 @@ Converted& convert_vertices(const uint8_t* src, uint32_t count, uint32_t fvf, ui
     const bool xyz = (fvf & D3DFVF_XYZ) != 0 || rhw;
     const bool diffuse = (fvf & D3DFVF_DIFFUSE) != 0;
     uint32_t tex_count = (fvf & 0xf00) >> 8;
-    if (tex_count > 0 && g_texture && g_texture->bgfx_tex == 0xFFFF && !g_texture->rgba.empty()) mgfx_texture_upload(g_texture);
+    if (tex_count > 0 && g_texture && g_texture->bgfx_tex == 0xFFFF && !g_texture->rgba.empty()) {
+        if (!mgfx_texture_upload(g_texture)) { /* leave handle invalid; textured=false below */ }
+    }
     out.textured = tex_count > 0 && g_texture && g_texture->bgfx_tex != 0xFFFF;
     uint32_t out_stride = out.textured ? 24 : 16;
-    out.bytes.resize(count * out_stride);
+    if (count > 0 && uint64_t(count) * out_stride > SIZE_MAX) {
+        out.bytes.clear();
+        return out;
+    }
+    try { out.bytes.resize(size_t(count) * out_stride); }
+    catch (...) { out.bytes.clear(); return out; }
     int tw = g_target_w > 0 ? g_target_w : g_ScreenX;
     int th = g_target_h > 0 ? g_target_h : g_ScreenY;
     for (uint32_t i = 0; i < count; ++i) {
@@ -729,7 +740,7 @@ static bool texture_ready(IDirect3DTexture9* tex) {
     if (!tex || tex->width == 0 || tex->width > 8192 || tex->height == 0 || tex->height > 8192) return false;
     if (tex->is_rt && tex->bgfx_tex != 0xFFFF && bgfx::isValid(bgfx::TextureHandle{tex->bgfx_tex})) return true;
     if (tex->rgba.size() != size_t(tex->width) * tex->height * 4) return false;
-    if (tex->bgfx_tex == 0xFFFF) mgfx_texture_upload(tex);
+    if (tex->bgfx_tex == 0xFFFF) { if (!mgfx_texture_upload(tex)) return false; }
     return tex->bgfx_tex != 0xFFFF && bgfx::isValid(bgfx::TextureHandle{tex->bgfx_tex});
 }
 
@@ -1404,10 +1415,14 @@ static int g_rt_cursor = 0;
 
 static void ensure_rt_fb(IDirect3DTexture9* tex) {
     if (!tex || tex->fb != 0xFFFF) return;
+    if (tex->width < 1) tex->width = 1;
+    if (tex->height < 1) tex->height = 1;
+    if (tex->width > 8192) tex->width = 8192;
+    if (tex->height > 8192) tex->height = 8192;
     ensure_shaders();
     if (!bgfx::getCaps()) return;
-    uint16_t w = uint16_t(tex->width ? tex->width : 1);
-    uint16_t h = uint16_t(tex->height ? tex->height : 1);
+    uint16_t w = uint16_t(tex->width);
+    uint16_t h = uint16_t(tex->height);
     const uint64_t flags = BGFX_TEXTURE_RT | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
     auto color = bgfx::createTexture2D(w, h, false, 1, bgfx::TextureFormat::RGBA8, flags);
     if (!bgfx::isValid(color)) {
@@ -1655,7 +1670,9 @@ void mgfx_set_texture(uint32_t stage, IDirect3DTexture9* tex) {
     }
     if (tex && !tex->is_rt && tex->width > 0 && tex->width <= 8192 && tex->height > 0 && tex->height <= 8192
         && tex->rgba.size() == size_t(tex->width) * tex->height * 4
-        && tex->bgfx_tex == 0xFFFF) mgfx_texture_upload(tex);
+        && tex->bgfx_tex == 0xFFFF) {
+        if (!mgfx_texture_upload(tex)) { /* handle stays 0xFFFF; texture_ready rejects */ }
+    }
 }
 
 void mgfx_set_fvf(uint32_t fvf) {
@@ -1669,8 +1686,129 @@ void mgfx_set_stream(IDirect3DVertexBuffer9* vb, uint32_t offset, uint32_t strid
     if (stride) g_stride = stride;
 }
 
-void mgfx_set_render_target(IDirect3DSurface9* surface) {
-    g_rt = (surface && (surface->shadow_target || surface->owner)) ? surface : nullptr;
+
+IDirect3DSurface9* mgfx_get_render_target() {
+    if (g_rt) return g_rt;
+    if (!g_default_bb) {
+        g_default_bb = new IDirect3DSurface9();
+        g_default_bb->width = uint32_t(g_ScreenX > 0 ? g_ScreenX : 1280);
+        g_default_bb->height = uint32_t(g_ScreenY > 0 ? g_ScreenY : 720);
+        g_default_bb->shadow_target = false;
+        try {
+            g_default_bb->pixels.assign(size_t(g_default_bb->width) * g_default_bb->height * 4, 0);
+        } catch (...) {
+            delete g_default_bb;
+            g_default_bb = nullptr;
+        }
+    }
+    return g_default_bb;
+}
+
+void mgfx_set_depth_stencil(IDirect3DSurface9* surface) {
+    g_depth_stencil = surface;
+}
+
+IDirect3DSurface9* mgfx_get_depth_stencil() {
+    if (g_depth_stencil) return g_depth_stencil;
+    static IDirect3DSurface9* def = nullptr;
+    if (!def) {
+        def = new IDirect3DSurface9();
+        def->width = uint32_t(g_ScreenX > 0 ? g_ScreenX : 1280);
+        def->height = uint32_t(g_ScreenY > 0 ? g_ScreenY : 720);
+        try { def->depth.assign(size_t(def->width) * def->height, 1.f); } catch (...) {}
+    }
+    return def;
+}
+
+long mgfx_color_fill(IDirect3DSurface9* surface, const D3DRECT* rect, D3DCOLOR color) {
+    if (!surface) return E_POINTER;
+    // gpu-only target, no cpu pixels — dont pretend we filled it
+    if (surface->owner && surface->owner->is_rt && surface->pixels.empty())
+        return E_NOTIMPL;
+    const uint64_t need64 = uint64_t(surface->width) * surface->height * 4;
+    if (surface->width == 0 || surface->height == 0 || need64 > SIZE_MAX) return E_INVALIDARG;
+    const size_t need = size_t(need64);
+    if (surface->pixels.empty()) {
+        // first fill on a cpu surface can allocate
+        if (surface->owner && surface->owner->is_rt) return E_NOTIMPL;
+        try { surface->pixels.assign(need, 0); } catch (...) { return E_OUTOFMEMORY; }
+    }
+    if (surface->pixels.size() < need) return E_INVALIDARG;
+    uint32_t x0 = 0, y0 = 0, x1 = surface->width, y1 = surface->height;
+    if (rect) {
+        x0 = rect->x1 > 0 ? uint32_t(rect->x1) : 0;
+        y0 = rect->y1 > 0 ? uint32_t(rect->y1) : 0;
+        x1 = rect->x2 > 0 ? uint32_t(rect->x2) : surface->width;
+        y1 = rect->y2 > 0 ? uint32_t(rect->y2) : surface->height;
+        if (x0 > surface->width) x0 = surface->width;
+        if (y0 > surface->height) y0 = surface->height;
+        if (x1 > surface->width) x1 = surface->width;
+        if (y1 > surface->height) y1 = surface->height;
+        if (x0 >= x1 || y0 >= y1) return S_OK;
+    }
+    const uint8_t rr = uint8_t(color >> 16), gg = uint8_t(color >> 8), bb = uint8_t(color), aa = uint8_t(color >> 24);
+    for (uint32_t y = y0; y < y1; ++y) {
+        for (uint32_t x = x0; x < x1; ++x) {
+            uint8_t* p = surface->pixels.data() + (size_t(y) * surface->width + x) * 4;
+            p[0] = rr; p[1] = gg; p[2] = bb; p[3] = aa;
+        }
+    }
+    return S_OK;
+}
+
+long mgfx_get_render_target_data(IDirect3DSurface9* src, IDirect3DSurface9* dst) {
+    if (!src || !dst) return E_POINTER;
+    if (src->width == 0 || src->height == 0 || dst->width == 0 || dst->height == 0) return E_INVALIDARG;
+    if (src->width > 8192 || src->height > 8192 || dst->width > 8192 || dst->height > 8192) return E_INVALIDARG;
+    const uint8_t* sdata = nullptr;
+    uint32_t sw = src->width, sh = src->height;
+    size_t src_bytes = 0;
+    if (!src->pixels.empty()) {
+        sdata = src->pixels.data();
+        src_bytes = src->pixels.size();
+    } else if (src->owner && !src->owner->rgba.empty()) {
+        sdata = src->owner->rgba.data();
+        sw = src->owner->width;
+        sh = src->owner->height;
+        src_bytes = src->owner->rgba.size();
+    } else {
+        // no cpu mirror and we dont do gpu readback yet
+        return E_NOTIMPL;
+    }
+    const uint64_t need_src = uint64_t(sw) * sh * 4;
+    if (need_src > src_bytes) return E_INVALIDARG;
+    const uint64_t need_dst = uint64_t(dst->width) * dst->height * 4;
+    if (need_dst > SIZE_MAX) return E_OUTOFMEMORY;
+    if (dst->pixels.size() < size_t(need_dst)) {
+        try { dst->pixels.assign(size_t(need_dst), 0); }
+        catch (...) { return E_OUTOFMEMORY; }
+    }
+    const uint32_t cw = sw < dst->width ? sw : dst->width;
+    const uint32_t ch = sh < dst->height ? sh : dst->height;
+    for (uint32_t y = 0; y < ch; ++y) {
+        const size_t soff = size_t(y) * sw * 4;
+        const size_t doff = size_t(y) * dst->width * 4;
+        if (soff + size_t(cw) * 4 > src_bytes) return E_INVALIDARG;
+        if (doff + size_t(cw) * 4 > dst->pixels.size()) return E_INVALIDARG;
+        std::memcpy(dst->pixels.data() + doff, sdata + soff, size_t(cw) * 4);
+    }
+    return S_OK;
+}
+
+long mgfx_set_render_target(IDirect3DSurface9* surface) {
+    // null / default backbuffer -> draw to screen
+    if (!surface || surface == g_default_bb) {
+        g_rt = nullptr;
+        return S_OK;
+    }
+    // actual offscreen or texture surface
+    if (surface->shadow_target || surface->owner) {
+        g_rt = surface;
+        return S_OK;
+    }
+    // anything else: treat as backbuffer restore
+    g_rt = nullptr;
+    return S_OK;
 }
 
 void mgfx_set_viewport(const D3DVIEWPORT9* vp) {
@@ -2004,36 +2142,12 @@ long mgfx_draw(uint32_t prim, int base_vertex, uint32_t start_index, uint32_t pr
     return S_OK;
 }
 
-void mgfx_texture_upload(IDirect3DTexture9* tex) {
-    if (!tex || tex->is_rt || tex->rgba.empty() || tex->width == 0 || tex->height == 0) return;
-    if (tex->width > 8192 || tex->height > 8192) return;
-    if (tex->rgba.size() < size_t(tex->width) * tex->height * 4) return;
-    if (!bgfx::getCaps()) return;
-    static int dumped = 0;
-    if (dumped < 4) {
-        uint32_t nz = 0;
-        const uint32_t n = tex->width * tex->height;
-        for (uint32_t i = 0; i < n; ++i) {
-            const uint8_t* p = tex->rgba.data() + i * 4;
-            if (p[0] | p[1] | p[2]) ++nz;
-        }
-        const uint32_t mid = ((tex->height / 2) * tex->width + tex->width / 2) * 4;
-        const uint8_t* c = tex->rgba.data() + std::min<uint32_t>(mid, uint32_t(tex->rgba.size() - 4));
-        std::cout << "upload " << tex->width << "x" << tex->height << " nonzero " << nz << "/" << n
-                  << " mid " << int(c[0]) << "," << int(c[1]) << "," << int(c[2]) << "," << int(c[3]) << "\n";
-        if (dumped == 0) {
-            FILE* f = std::fopen("/tmp/tex0.ppm", "wb");
-            if (f) {
-                std::fprintf(f, "P6\n%u %u\n255\n", tex->width, tex->height);
-                for (uint32_t i = 0; i < n; ++i) {
-                    const uint8_t* p = tex->rgba.data() + i * 4;
-                    std::fputc(p[0], f); std::fputc(p[1], f); std::fputc(p[2], f);
-                }
-                std::fclose(f);
-            }
-        }
-        ++dumped;
-    }
+bool mgfx_texture_upload(IDirect3DTexture9* tex) {
+    if (!tex || tex->is_rt || tex->rgba.empty() || tex->width == 0 || tex->height == 0) return false;
+    if (tex->width > 8192 || tex->height > 8192) return false;
+    if (tex->rgba.size() < size_t(tex->width) * tex->height * 4) return false;
+    if (!bgfx::getCaps()) return false;
+
     bool cpu_text = g_cpu_target && g_cpu_target->owner == tex;
     if (!cpu_text) {
         bool any_alpha = false;
@@ -2147,11 +2261,13 @@ void mgfx_texture_upload(IDirect3DTexture9* tex) {
             std::cout << "mips " << tex->width << "x" << tex->height << " levels " << levels << std::endl;
         }
     }
-    // recreate the texture, updateTexture2D is ignored
+    // create the new tex first so a failed upload keeps the old one
+    auto handle = bgfx::createTexture2D(uint16_t(tex->width), uint16_t(tex->height), want_mips, 1, bgfx::TextureFormat::RGBA8, BGFX_SAMPLER_NONE | BGFX_TEXTURE_NONE, mem);
+    if (!bgfx::isValid(handle)) return false;
     auto existing = bgfx::TextureHandle{tex->bgfx_tex};
     if (bgfx::isValid(existing)) bgfx::destroy(existing);
-    auto handle = bgfx::createTexture2D(uint16_t(tex->width), uint16_t(tex->height), want_mips, 1, bgfx::TextureFormat::RGBA8, BGFX_SAMPLER_NONE | BGFX_TEXTURE_NONE, mem);
-    tex->bgfx_tex = bgfx::isValid(handle) ? handle.idx : uint16_t(0xFFFF);
+    tex->bgfx_tex = handle.idx;
+    return true;
 }
 
 static bool decode_png(const void* data, uint32_t size, IDirect3DTexture9* tex) {
@@ -2163,32 +2279,53 @@ static bool decode_png(const void* data, uint32_t size, IDirect3DTexture9* tex) 
     image.version = PNG_IMAGE_VERSION;
     if (!png_image_begin_read_from_memory(&image, data, size)) return false;
     image.format = PNG_FORMAT_RGBA;
-    tex->width = image.width ? image.width : 1;
-    tex->height = image.height ? image.height : 1;
-    tex->rgba.resize(tex->width * tex->height * 4);
+    if (image.width == 0 || image.height == 0 || image.width > 8192 || image.height > 8192) {
+        png_image_free(&image);
+        return false;
+    }
+    const size_t npix = size_t(image.width) * size_t(image.height);
+    if (npix > (SIZE_MAX / 4)) {
+        png_image_free(&image);
+        return false;
+    }
+    tex->width = image.width;
+    tex->height = image.height;
+    tex->rgba.assign(npix * 4, 0);
     bool ok = png_image_finish_read(&image, nullptr, tex->rgba.data(), 0, nullptr) != 0;
     png_image_free(&image);
-    if (!ok) return false;
-    mgfx_texture_upload(tex);
-    return true;
+    if (!ok) {
+        tex->rgba.clear();
+        return false;
+    }
+    return mgfx_texture_upload(tex);
 }
 
 long mgfx_texture_from_memory(const void* data, uint32_t size, IDirect3DTexture9** out) {
-    if (!out) return E_FAIL;
-    auto* tex = new IDirect3DTexture9();
-    *out = tex;
+    if (!out) return E_POINTER;
+    *out = nullptr;
+    if (!data || size < 8) return E_INVALIDARG;
+
+    std::unique_ptr<IDirect3DTexture9> holder(new IDirect3DTexture9());
+    IDirect3DTexture9* tex = holder.get();
+    auto fail = [&](long hr) { holder.reset(); return hr; };
+
     auto note = [&](const char* how) {
         static int n = 0;
         if (n >= 24) return;
         ++n;
-        const auto* b = data && size >= 4 ? static_cast<const uint8_t*>(data) : nullptr;
+        const auto* b = static_cast<const uint8_t*>(data);
         std::printf("tex#%d %s size %u magic %02x%02x%02x%02x -> %ux%u\n", n, how, size,
-                    b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0, b ? b[3] : 0, tex->width, tex->height);
+                    b[0], b[1], b[2], b[3], tex->width, tex->height);
         std::fflush(stdout);
     };
-    if (!data || size < 8) { note("empty"); return S_OK; }
-    if (decode_png(data, size, tex)) { note("png"); return S_OK; }
-    // decode 16-bit lum-alpha DDS here, bimg does not
+
+    if (decode_png(data, size, tex)) {
+        note("png");
+        *out = holder.release();
+        return S_OK;
+    }
+
+    // L8/L8A8: bimg skips these, keep the simple path from main
     if (size >= 128) {
         const auto* b = static_cast<const uint8_t*>(data);
         if (b[0] == 'D' && b[1] == 'D' && b[2] == 'S' && b[3] == ' ') {
@@ -2198,62 +2335,86 @@ long mgfx_texture_from_memory(const void* data, uint32_t size, IDirect3DTexture9
             std::memcpy(&flags, b + 80, 4);
             std::memcpy(&bitcount, b + 88, 4);
             const uint8_t* src = b + 128;
-            const uint32_t n = w * h;
             const bool lum = (flags & 0x20000) != 0;
-            if (lum && w > 0 && h > 0 && w <= 4096 && h <= 4096 && bitcount == 16 && (flags & 1)
-                && size >= 128u + n * 2u) {
-                tex->width = w;
-                tex->height = h;
-                tex->rgba.resize(size_t(n) * 4);
-                for (uint32_t i = 0; i < n; ++i) {
-                    uint8_t L = src[i * 2], A = src[i * 2 + 1];
-                    uint8_t* p = tex->rgba.data() + size_t(i) * 4;
-                    p[0] = p[1] = p[2] = L;
-                    p[3] = A;
+            if (lum && w > 0 && h > 0 && w <= 4096 && h <= 4096) {
+                const uint64_t n64 = uint64_t(w) * uint64_t(h);
+                if (n64 <= (SIZE_MAX / 4)) {
+                    const uint32_t n = uint32_t(n64);
+                    if (bitcount == 16 && (flags & 1) && size >= 128u + n * 2u) {
+                        tex->width = w;
+                        tex->height = h;
+                        try { tex->rgba.resize(size_t(n) * 4); } catch (...) { return fail(E_FAIL); }
+                        for (uint32_t i = 0; i < n; ++i) {
+                            uint8_t L = src[i * 2], A = src[i * 2 + 1];
+                            uint8_t* p = tex->rgba.data() + size_t(i) * 4;
+                            p[0] = p[1] = p[2] = L;
+                            p[3] = A;
+                        }
+                        if (!mgfx_texture_upload(tex)) return fail(E_FAIL);
+                        note("l8a8");
+                        *out = holder.release();
+                        return S_OK;
+                    }
+                    if (bitcount == 8 && !(flags & 1) && size >= 128u + n) {
+                        tex->width = w;
+                        tex->height = h;
+                        try { tex->rgba.resize(size_t(n) * 4); } catch (...) { return fail(E_FAIL); }
+                        for (uint32_t i = 0; i < n; ++i) {
+                            uint8_t L = src[i];
+                            uint8_t* p = tex->rgba.data() + size_t(i) * 4;
+                            p[0] = p[1] = p[2] = L;
+                            p[3] = 255;
+                        }
+                        if (!mgfx_texture_upload(tex)) return fail(E_FAIL);
+                        note("l8");
+                        *out = holder.release();
+                        return S_OK;
+                    }
                 }
-                mgfx_texture_upload(tex);
-                note("l8a8");
-                return S_OK;
-            }
-            if (lum && w > 0 && h > 0 && w <= 4096 && h <= 4096 && bitcount == 8 && !(flags & 1)
-                && size >= 128u + n) {
-                tex->width = w;
-                tex->height = h;
-                tex->rgba.resize(size_t(n) * 4);
-                for (uint32_t i = 0; i < n; ++i) {
-                    uint8_t L = src[i];
-                    uint8_t* p = tex->rgba.data() + size_t(i) * 4;
-                    p[0] = p[1] = p[2] = L;
-                    p[3] = 255;
-                }
-                mgfx_texture_upload(tex);
-                note("l8");
-                return S_OK;
             }
         }
     }
+
     bx::Error err;
     bimg::ImageContainer* image = bimg::imageParseDds(&g_alloc, data, size, &err);
-    if (!image) {
-        note("fail");
-        return S_OK;
+    if (!image) { note("fail"); return fail(E_FAIL); }
+    if (image->m_width == 0 || image->m_height == 0 || image->m_width > 8192 || image->m_height > 8192) {
+        bimg::imageFree(image); return fail(E_INVALIDARG);
     }
-    tex->width = image->m_width;
-    tex->height = image->m_height;
     bimg::ImageContainer* rgba = image;
-    if (image->m_format != bimg::TextureFormat::RGBA8) {
+    if (image->m_format != bimg::TextureFormat::RGBA8)
         rgba = bimg::imageConvert(&g_alloc, bimg::TextureFormat::RGBA8, *image, false);
-    }
-    if (rgba && rgba->m_data) {
-        uint32_t bytes = rgba->m_width * rgba->m_height * 4;
-        tex->rgba.assign(static_cast<uint8_t*>(rgba->m_data), static_cast<uint8_t*>(rgba->m_data) + bytes);
-        mgfx_texture_upload(tex);
-        note("dds");
-    } else {
+    if (!rgba || !rgba->m_data || rgba->m_width == 0 || rgba->m_height == 0
+        || rgba->m_width > 8192 || rgba->m_height > 8192) {
         note("convert-fail");
+        if (rgba && rgba != image) bimg::imageFree(rgba);
+        bimg::imageFree(image);
+        return fail(E_FAIL);
     }
+    const size_t bytes = size_t(rgba->m_width) * size_t(rgba->m_height) * 4;
+    // m_size is total bytes when set; 0 means unknown — only reject if set and too small
+    if (rgba->m_size != 0 && rgba->m_size < bytes) {
+        if (rgba && rgba != image) bimg::imageFree(rgba);
+        bimg::imageFree(image);
+        return fail(E_FAIL);
+    }
+    tex->width = rgba->m_width; tex->height = rgba->m_height;
+    try {
+        tex->rgba.assign(static_cast<uint8_t*>(rgba->m_data), static_cast<uint8_t*>(rgba->m_data) + bytes);
+    } catch (...) {
+        if (rgba && rgba != image) bimg::imageFree(rgba);
+        bimg::imageFree(image);
+        return fail(E_FAIL);
+    }
+    if (!mgfx_texture_upload(tex)) {
+        if (rgba && rgba != image) bimg::imageFree(rgba);
+        bimg::imageFree(image);
+        return fail(E_FAIL);
+    }
+    note("dds");
     if (rgba && rgba != image) bimg::imageFree(rgba);
     bimg::imageFree(image);
+    *out = holder.release();
     return S_OK;
 }
 
@@ -2262,10 +2423,17 @@ IDirect3DDevice9* g_device = nullptr;
 }
 
 long IDirect3D9::CreateDevice(uint32_t, uint32_t, HWND, uint32_t, D3DPRESENT_PARAMETERS* params, IDirect3DDevice9** device) {
-    if (!g_device) g_device = new IDirect3DDevice9();
-    if (device) *device = g_device;
+    if (!device) return E_POINTER;
+    *device = nullptr;
     uint32_t width = params && params->BackBufferWidth ? params->BackBufferWidth : 1280;
     uint32_t height = params && params->BackBufferHeight ? params->BackBufferHeight : 720;
+    if (width == 0 || height == 0 || width > 8192 || height > 8192) return E_INVALIDARG;
+    try {
+        if (!g_device) g_device = new IDirect3DDevice9();
+    } catch (...) {
+        return E_OUTOFMEMORY;
+    }
+    *device = g_device;
     bgfx::setViewClear(VIEW_WORLD, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x1a2430ff, 1.0f, 0);
     bgfx::setViewRect(VIEW_WORLD, 0, 0, uint16_t(width), uint16_t(height));
     ensure_shaders();
