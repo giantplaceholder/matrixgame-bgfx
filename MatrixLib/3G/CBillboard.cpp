@@ -63,6 +63,7 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
 
     SDrawBillGroup groups[MAX_BB_TEXGROUPS];
     int groupscnt = 0;
+    int intense_groups = 0;
 
     if (!_intense_queue.empty() || !_draw_queue.empty())
     {
@@ -123,6 +124,7 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
         };
 
         process_queue(_intense_queue, iview);
+        intense_groups = groupscnt;
 
         if (groupscnt < MAX_BB_TEXGROUPS && ost > 0)
         {
@@ -194,13 +196,20 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
 
         g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-        // z was clipping the cage
-        g_D3DD->SetRenderState(D3DRS_ZENABLE, FALSE);
 
         g_D3DD->SetStreamSource(0, GET_VB(m_VB), 0, sizeof(SBillboardVertex));
         ASSERT_DX(g_D3DD->SetIndices(GET_IB(m_IB)));
 
-        for (int i = 0; i < groupscnt; ++i) {
+        // soft particles: no Z test; lines/beams keep Z so they sit behind solid geometry
+        g_D3DD->SetRenderState(D3DRS_ZENABLE, FALSE);
+        for (int i = 0; i < intense_groups; ++i) {
+            groups[i].tex->Preload();
+            ASSERT_DX(g_D3DD->SetTexture(0, groups[i].tex->Tex()));
+            ASSERT_DX(g_D3DD->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, groups[i].min_idx, groups[i].cntv,
+                                                   groups[i].ibase, groups[i].cntt));
+        }
+        g_D3DD->SetRenderState(D3DRS_ZENABLE, TRUE);
+        for (int i = intense_groups; i < groupscnt; ++i) {
             groups[i].tex->Preload();
             ASSERT_DX(g_D3DD->SetTexture(0, groups[i].tex->Tex()));
             ASSERT_DX(g_D3DD->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, groups[i].min_idx, groups[i].cntv,
@@ -208,6 +217,7 @@ void CBillboard::SortEndDraw(const D3DXMATRIX &iview, const D3DXVECTOR3 &campos)
         }
     }
 
+    g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE));
     g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
@@ -395,25 +405,35 @@ void CBillboard::UpdateVBSlot(SBillboardVertex *vb, const D3DXMATRIX &iview) con
     D3DXVec3TransformCoordArray(&vb->p, sizeof(SBillboardVertex), base, sizeof(D3DXVECTOR3), &m, 4);
 
     if (IsIntense()) {
-        vb->color = m_Color;
+        // soft RGB+A: additive stacks less (explosions/glow)
+        auto soft = [](DWORD c) -> DWORD {
+            unsigned r = (c >> 16) & 0xFFu, g = (c >> 8) & 0xFFu, b = c & 0xFFu, a = (c >> 24) & 0xFFu;
+            r = (r * 110u) / 255u;
+            g = (g * 110u) / 255u;
+            b = (b * 110u) / 255u;
+            a = (a * 100u) / 255u;
+            return (a << 24) | (r << 16) | (g << 8) | b;
+        };
+        DWORD ic = soft(m_Color);
+        vb->color = ic;
         vb->tu = 0;
         vb->tv = 1;
 
         ++vb;
 
-        vb->color = m_Color;
+        vb->color = ic;
         vb->tu = 0;
         vb->tv = 0;
 
         ++vb;
 
-        vb->color = m_Color;
+        vb->color = ic;
         vb->tu = 1;
         vb->tv = 1;
 
         ++vb;
 
-        vb->color = m_Color;
+        vb->color = ic;
         vb->tu = 1;
         vb->tv = 0;
     }
@@ -586,7 +606,7 @@ void CBillboardLine::UpdateVBSlot(SBillboardVertex *vb, const D3DXVECTOR3 &campo
     vb->tv = 0;
 }
 
-void CBillboardLine::DrawNow(const D3DXVECTOR3 &campos) const
+void CBillboardLine::DrawNow(const D3DXVECTOR3 &campos, bool ztest) const
 {
     ASSERT_DX(g_D3DD->SetFVF(BILLBOARD_FVF));
 
@@ -594,6 +614,7 @@ void CBillboardLine::DrawNow(const D3DXVECTOR3 &campos) const
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, FALSE));
+    g_D3DD->SetRenderState(D3DRS_ZENABLE, ztest ? TRUE : FALSE);
 
     g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
@@ -615,10 +636,12 @@ void CBillboardLine::DrawNow(const D3DXVECTOR3 &campos) const
 
     g_D3DD->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, &vb, sizeof(SBillboardVertex));
 
+    g_D3DD->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
     g_D3DD->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE));
     g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
     ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ZWRITEENABLE, TRUE));
+    g_D3DD->SetRenderState(D3DRS_ZENABLE, TRUE);
 }
 
 void CBillboardLine::AddToDrawQueue(void) const

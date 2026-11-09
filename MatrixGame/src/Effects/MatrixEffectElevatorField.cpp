@@ -103,9 +103,9 @@ void CMatrixEffectElevatorField::BeforeDraw(void) {}
 void CMatrixEffectElevatorField::Draw(void) const {
     DTRACE();
 
+    // draw without Z — depth was cutting the cage
     for (int i = 0; i < m_AllBBCnt; ++i) {
-        // m_BBoards[i].bb.Sort(g_MatrixMap->GetViewMatrix());
-        m_BBoards[i].bb.AddToDrawQueue();
+        m_BBoards[i].bb.DrawNow(g_MatrixMap->m_Camera.GetDrawNowFC(), false);
     }
 
     /*

@@ -139,7 +139,7 @@ public:
 
     void Release(void);
 
-    void DrawNow(const D3DXVECTOR3 &campos) const;
+    void DrawNow(const D3DXVECTOR3 &campos, bool ztest = true) const;
     void AddToDrawQueue(void) const;
     void UpdateVBSlot(SBillboardVertex *vb, const D3DXVECTOR3 &campos) const;
 
