@@ -12,6 +12,9 @@
 // wchar_t is 32-bit here. Paths used by the engine are ASCII
 
 #include <cstdint>
+#include <climits>
+#include <new>
+#include <unordered_set>
 #include <cstddef>
 #include <cstring>
 #include <cwchar>
@@ -210,7 +213,7 @@ inline int ReleaseDC(HWND, HDC) { return 1; }
 inline HDC CreateCompatibleDC(HDC) { return reinterpret_cast<HDC>(static_cast<uintptr_t>(1)); }
 inline void* SelectObject(HDC, void* obj) { return obj ? obj : reinterpret_cast<void*>(static_cast<uintptr_t>(1)); }
 inline HBITMAP CreateCompatibleBitmap(HDC, int, int) { return nullptr; }
-inline BOOL BitBlt(HDC, int, int, int, int, HDC, int, int, DWORD) { return TRUE; }
+inline BOOL BitBlt(HDC, int, int, int, int, HDC, int, int, DWORD) { return FALSE; } // not wired up
 inline BOOL ClientToScreen(HWND, POINT*) { return TRUE; }
 inline BOOL GetWindowRect(HWND, RECT*) { return TRUE; }
 inline BOOL MoveWindow(HWND, int, int, int, int, BOOL) { return TRUE; }
@@ -221,7 +224,7 @@ int mg_show_cursor(int show);
 inline int ShowCursor(int show) { return mg_show_cursor(show); }
 int mg_create_directory(const wchar_t* path);
 inline BOOL CreateDirectoryW(const wchar_t* path, void*) { return mg_create_directory(path) ? TRUE : FALSE; }
-inline BOOL DeleteFileW(const wchar_t*) { return TRUE; }
+inline BOOL DeleteFileW(const wchar_t*) { return FALSE; } // not hooked up
 inline BOOL CreateProcess(const char*, char*, void*, void*, BOOL, DWORD, void*, const char*, STARTUPINFOA*, PROCESS_INFORMATION*) { return FALSE; }
 inline HICON CreateIconIndirect(ICONINFO*) { return nullptr; }
 inline BOOL DestroyIcon(HICON) { return TRUE; }
@@ -344,20 +347,53 @@ constexpr uint32_t BI_BITFIELDS = 3;
 constexpr uint32_t DIB_RGB_COLORS = 0;
 inline int GetDIBits(HDC, HBITMAP, uint32_t, uint32_t, void*, LPBITMAPINFO, uint32_t) { return 0; }
 inline int DeleteDC(HDC) { return 1; }
-inline int DeleteObject(void*) { return 1; }
 struct MgDib { std::vector<uint8_t> bits; };
+inline std::unordered_set<void*>& mg_dib_handles() {
+    static std::unordered_set<void*> s;
+    return s;
+}
+inline int DeleteObject(void* obj) {
+    if (!obj) return 0;
+    auto& s = mg_dib_handles();
+    auto it = s.find(obj);
+    if (it == s.end()) return 0;
+    s.erase(it);
+    delete static_cast<MgDib*>(obj);
+    return 1;
+}
 inline void* CreateDIBSection(HDC, const BITMAPINFO* info, uint32_t, void** bits, void*, uint32_t) {
-    auto* dib = new MgDib();
-    int32_t w = 1, h = 1;
-    uint16_t bpp = 32;
-    if (info) {
-        w = info->bmiHeader.biWidth > 0 ? info->bmiHeader.biWidth : 1;
-        h = info->bmiHeader.biHeight < 0 ? -info->bmiHeader.biHeight : info->bmiHeader.biHeight;
-        if (h <= 0) h = 1;
-        if (info->bmiHeader.biBitCount) bpp = info->bmiHeader.biBitCount;
+    if (bits) *bits = nullptr;
+    if (!info) return nullptr;
+    if (info->bmiHeader.biSize < sizeof(BITMAPINFOHEADER)) return nullptr;
+    const auto& hdr = info->bmiHeader;
+    if (hdr.biWidth <= 0 || hdr.biWidth > 8192) return nullptr;
+    if (hdr.biHeight == 0 || hdr.biHeight == INT32_MIN) return nullptr;
+    const uint32_t height = hdr.biHeight < 0 ? uint32_t(-hdr.biHeight) : uint32_t(hdr.biHeight);
+    if (height == 0 || height > 8192) return nullptr;
+    if (hdr.biPlanes != 1) return nullptr;
+    const uint16_t bpp = hdr.biBitCount;
+    if (bpp == 24 || bpp == 32) {
+        if (hdr.biCompression != 0 && hdr.biCompression != BI_RGB) return nullptr;
+    } else if (bpp == 16) {
+        if (hdr.biCompression != BI_BITFIELDS) return nullptr;
+        // we only support the RGB565 layout WinBitmap uses
+        const uint32_t rm = info->bmiColors[0], gm = info->bmiColors[1], bm = info->bmiColors[2];
+        if (!(rm == 0x0000f800 && gm == 0x000007e0 && bm == 0x0000001f)) return nullptr;
+    } else {
+        return nullptr;
     }
-    uint32_t stride = (uint32_t(w) * (bpp / 8) + 3u) & ~3u;
-    dib->bits.assign(stride * uint32_t(h), 0);
+    const uint64_t stride = (uint64_t(uint32_t(hdr.biWidth)) * (bpp / 8u) + 3u) & ~3ull;
+    const uint64_t total = stride * uint64_t(height);
+    if (total == 0 || total > (1ull << 30)) return nullptr;
+    auto* dib = new (std::nothrow) MgDib();
+    if (!dib) return nullptr;
+    try {
+        dib->bits.assign(size_t(total), 0);
+        mg_dib_handles().insert(dib);
+    } catch (...) {
+        delete dib;
+        return nullptr;
+    }
     if (bits) *bits = dib->bits.data();
     return dib;
 }
