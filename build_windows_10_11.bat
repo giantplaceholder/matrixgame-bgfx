@@ -104,7 +104,7 @@ goto :libs_ready
 echo ==^> building zlib and libpng
 set CM_SRC=%WORK%\zlib
 set CM_BUILD=%WORK%\zlib-build
-set CM_EXTRA=-DCMAKE_INSTALL_PREFIX="%PREFIX%" -DBUILD_SHARED_LIBS=OFF
+set CM_EXTRA=-DCMAKE_INSTALL_PREFIX="%PREFIX%" -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS="-Wno-old-style-definition"
 call :cmake_cfg || exit /b 1
 "%CMAKE%" --build "%WORK%\zlib-build" --target install -j %JOBS% || exit /b 1
 if not exist "%ZLIB_A%" set "ZLIB_A=%PREFIX%\lib\libz.a"
