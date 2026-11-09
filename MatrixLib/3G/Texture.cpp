@@ -6,6 +6,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the LICENSE and NOTICE files included
 
+#include <memory>
 #include "Texture.hpp"
 
 #include "CFile.hpp"
@@ -628,6 +629,56 @@ void CTextureManaged::LoadFromBitmap(int level, const CBitmap &bm, bool convert_
 }
 
 void CTextureManaged::LoadFromBitmap(const CBitmap &bm, D3DFORMAT fmt, int levels) {
+#if defined(MATRIXGAME_BGFX)
+    if (bm.Data() && bm.SizeX() > 0 && bm.SizeY() > 0) {
+        const int sx = bm.SizeX();
+        const int sy = bm.SizeY();
+        const int pitch = bm.Pitch();
+        const int bpp = bm.BytePP();
+        if (sx > 8192 || sy > 8192 || pitch <= 0 || bpp <= 0) return;
+        if (bpp != 1 && bpp != 3 && bpp != 4) return;
+        if (size_t(pitch) < size_t(sx) * size_t(bpp)) return;
+        // CBitmap has no total size field, pitch*height is the best we got.
+        const size_t npix = size_t(sx) * size_t(sy);
+        if (npix > (SIZE_MAX / 4)) return;
+
+        std::unique_ptr<IDirect3DTexture9> holder(new IDirect3DTexture9());
+        IDirect3DTexture9* ntex = holder.get();
+        ntex->width = uint32_t(sx);
+        ntex->height = uint32_t(sy);
+        try {
+            ntex->rgba.resize(npix * 4);
+        } catch (...) {
+            return;
+        }
+        const uint8_t* src = static_cast<const uint8_t*>(bm.Data());
+        for (int y = 0; y < sy; ++y) {
+            for (int x = 0; x < sx; ++x) {
+                const uint8_t* p = src + size_t(y) * size_t(pitch) + size_t(x) * size_t(bpp);
+                uint8_t* d = ntex->rgba.data() + (size_t(y) * size_t(sx) + size_t(x)) * 4;
+                if (bpp >= 3) { d[0]=p[0]; d[1]=p[1]; d[2]=p[2]; d[3]= bpp>=4 ? p[3] : 255; }
+                else { d[0]=d[1]=d[2]=p[0]; d[3]=255; }
+            }
+        }
+        if (!mgfx_texture_upload(ntex)) return;
+
+#ifdef USE_DX_MANAGED_TEXTURES
+        if (m_Tex) m_Tex->Release();
+        m_Tex = holder.release();
+        m_Size.x = sx;
+        m_Size.y = sy;
+#else
+        Unload();
+        if (m_TexFrom) m_TexFrom->Release();
+        m_TexFrom = holder.release();
+        m_Levelcnt = 1;
+        m_Size.x = sx;
+        m_Size.y = sy;
+#endif
+        return;
+    }
+#endif
+
 #ifdef USE_DX_MANAGED_TEXTURES
     if (m_Tex)
         m_Tex->Release();
@@ -636,36 +687,6 @@ void CTextureManaged::LoadFromBitmap(const CBitmap &bm, D3DFORMAT fmt, int level
     Unload();
     if (m_TexFrom)
         m_TexFrom->Release();
-#endif
-
-#if defined(MATRIXGAME_BGFX)
-    if (bm.Data() && bm.SizeX() > 0 && bm.SizeY() > 0) {
-        auto* tex = new IDirect3DTexture9();
-        tex->width = bm.SizeX();
-        tex->height = bm.SizeY();
-        tex->rgba.resize(tex->width * tex->height * 4);
-        const uint8_t* src = static_cast<const uint8_t*>(bm.Data());
-        for (int y = 0; y < bm.SizeY(); ++y) {
-            for (int x = 0; x < bm.SizeX(); ++x) {
-                const uint8_t* p = src + y * bm.Pitch() + x * std::max(1, bm.BytePP());
-                uint8_t* d = tex->rgba.data() + (y * tex->width + x) * 4;
-                if (bm.BytePP() >= 3) { d[0]=p[0]; d[1]=p[1]; d[2]=p[2]; d[3]= bm.BytePP()>=4 ? p[3] : 255; }
-                else { d[0]=d[1]=d[2]=p[0]; d[3]=255; }
-            }
-        }
-        mgfx_texture_upload(tex);
-#ifdef USE_DX_MANAGED_TEXTURES
-        m_Tex = tex;
-        m_Size.x = tex->width;
-        m_Size.y = tex->height;
-#else
-        m_TexFrom = tex;
-        m_Levelcnt = 1;
-        m_Size.x = tex->width;
-        m_Size.y = tex->height;
-#endif
-        return;
-    }
 #endif
 
     CBuf buf;
@@ -679,7 +700,6 @@ void CTextureManaged::LoadFromBitmap(const CBitmap &bm, D3DFORMAT fmt, int level
     D3DXCreateTextureFromFileInMemoryEx(g_D3DD, buf.Get(), buf.Len(), 0, 0, levels, 0, fmt, D3DPOOL_SYSTEMMEM,
                                         D3DX_FILTER_NONE, D3DX_FILTER_BOX, 0, NULL, NULL, &m_TexFrom);
 #endif
-    // m_TexFrom->GenerateMipSubLevels(
 
 #ifdef USE_DX_MANAGED_TEXTURES
     if (m_Tex != NULL) {
@@ -700,6 +720,7 @@ void CTextureManaged::LoadFromBitmap(const CBitmap &bm, D3DFORMAT fmt, int level
     }
 #endif
 }
+
 
 void CTextureManaged::LoadFromBitmap(const CBitmap &bm, bool convert_to_16bit, int levelcnt) {
     DTRACE();
