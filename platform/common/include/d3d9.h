@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <memory>
 
 using D3DCOLOR = uint32_t;
 
@@ -37,22 +38,26 @@ void mgfx_set_fvf(uint32_t fvf);
 void mgfx_set_stream(IDirect3DVertexBuffer9* vb, uint32_t offset, uint32_t stride);
 void mgfx_set_indices(IDirect3DIndexBuffer9* ib);
 long mgfx_draw(uint32_t prim, int base_vertex, uint32_t start_index, uint32_t prim_count, const void* verts, uint32_t stride, uint32_t vcount, const void* indices, uint32_t icount, bool index32);
-void mgfx_texture_upload(IDirect3DTexture9* tex);
+bool mgfx_texture_upload(IDirect3DTexture9* tex);
 long mgfx_texture_from_memory(const void* data, uint32_t size, IDirect3DTexture9** out);
 constexpr uint32_t D3D_SDK_VERSION = 32;
 constexpr long D3D_OK = 0;
-constexpr long D3DERR_DEVICELOST = 0x88760868;
-constexpr long D3DERR_INVALIDCALL = 0x8876086c;
-constexpr long D3DERR_NOTAVAILABLE = 0x8876086a;
-constexpr long D3DERR_OUTOFVIDEOMEMORY = 0x8876017c;
-constexpr long D3DERR_DEVICENOTRESET = 0x88760869;
+constexpr long D3DERR_DEVICELOST = static_cast<long>(static_cast<int32_t>(0x88760868u));
+constexpr long D3DERR_INVALIDCALL = static_cast<long>(static_cast<int32_t>(0x8876086cu));
+constexpr long D3DERR_NOTAVAILABLE = static_cast<long>(static_cast<int32_t>(0x8876086au));
+constexpr long D3DERR_OUTOFVIDEOMEMORY = static_cast<long>(static_cast<int32_t>(0x8876017cu));
+constexpr long D3DERR_DEVICENOTRESET = static_cast<long>(static_cast<int32_t>(0x88760869u));
 constexpr uint32_t D3DSGR_NO_CALIBRATION = 0;
 using D3DDEVTYPE = uint32_t;
 constexpr uint32_t D3DRS_ZFUNC = 23;
 constexpr long S_OK = 0;
-constexpr long E_FAIL = 0x80004005;
-#define FAILED(hr) ((hr) < 0)
-#define SUCCEEDED(hr) ((hr) >= 0)
+constexpr long E_FAIL = static_cast<long>(static_cast<int32_t>(0x80004005u));
+constexpr long E_POINTER = static_cast<long>(static_cast<int32_t>(0x80004003u));
+constexpr long E_INVALIDARG = static_cast<long>(static_cast<int32_t>(0x80070057u));
+constexpr long E_NOTIMPL = static_cast<long>(static_cast<int32_t>(0x80004001u));
+constexpr long E_OUTOFMEMORY = static_cast<long>(static_cast<int32_t>(0x8007000Eu));
+#define FAILED(hr) (static_cast<long>(hr) < 0)
+#define SUCCEEDED(hr) (static_cast<long>(hr) >= 0)
 
 constexpr uint32_t D3DADAPTER_DEFAULT = 0;
 constexpr uint32_t D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x40;
@@ -125,11 +130,17 @@ struct D3DRECT { int x1, y1, x2, y2; };
 struct D3DLOCKED_RECT { int Pitch; void* pBits; };
 
 struct IDirect3DSurface9;
-void mgfx_set_render_target(IDirect3DSurface9*);
+long mgfx_set_render_target(IDirect3DSurface9*);
+IDirect3DSurface9* mgfx_get_render_target();
+void mgfx_set_depth_stencil(IDirect3DSurface9*);
+IDirect3DSurface9* mgfx_get_depth_stencil();
+long mgfx_color_fill(IDirect3DSurface9*, const D3DRECT*, D3DCOLOR);
+long mgfx_get_render_target_data(IDirect3DSurface9*, IDirect3DSurface9*);
 void mgfx_set_viewport(const D3DVIEWPORT9*);
 void mgfx_get_viewport(D3DVIEWPORT9*);
 struct IDirect3DTexture9;
 void mgfx_track_texture(IDirect3DTexture9* tex, int alive);
+// surface lives with the texture; Release is a no-op
 struct IDirect3DSurface9 {
     uint32_t width = 1, height = 1, format = 21;
     bool shadow_target = false;
@@ -140,7 +151,12 @@ struct IDirect3DSurface9 {
     virtual ~IDirect3DSurface9() = default;
     virtual uint32_t Release() { return 0; }
     virtual long LockRect(D3DLOCKED_RECT* rect, const RECT*, uint32_t) {
-        if (pixels.empty()) pixels.assign(size_t(width) * height * 4, 0);
+        if (width == 0 || height == 0 || width > 8192 || height > 8192) return E_INVALIDARG;
+        if (pixels.empty()) {
+            const uint64_t n = uint64_t(width) * height;
+            if (n > (SIZE_MAX / 4)) return E_OUTOFMEMORY;
+            try { pixels.assign(size_t(n) * 4, 0); } catch (...) { return E_OUTOFMEMORY; }
+        }
         if (rect) { rect->Pitch = int(width * 4); rect->pBits = pixels.data(); }
         return S_OK;
     }
@@ -154,7 +170,14 @@ struct IDirect3DVertexBuffer9 {
     std::vector<uint8_t> bytes;
     virtual ~IDirect3DVertexBuffer9() = default;
     virtual uint32_t Release() { return 0; }
-    virtual long Lock(uint32_t offset, uint32_t, void** data, uint32_t) { if (data) *data = bytes.data() + offset; return S_OK; }
+    virtual long Lock(uint32_t offset, uint32_t size, void** data, uint32_t) {
+        if (!data) return E_POINTER;
+        if (offset > bytes.size()) return E_INVALIDARG;
+        const size_t avail = bytes.size() - offset;
+        if (size != 0 && size > avail) return E_INVALIDARG;
+        *data = bytes.empty() ? nullptr : bytes.data() + offset;
+        return S_OK;
+    }
     virtual long Unlock() { return S_OK; }
 };
 struct IDirect3DIndexBuffer9 {
@@ -162,7 +185,14 @@ struct IDirect3DIndexBuffer9 {
     bool index32 = false;
     virtual ~IDirect3DIndexBuffer9() = default;
     virtual uint32_t Release() { return 0; }
-    virtual long Lock(uint32_t offset, uint32_t, void** data, uint32_t) { if (data) *data = bytes.data() + offset; return S_OK; }
+    virtual long Lock(uint32_t offset, uint32_t size, void** data, uint32_t) {
+        if (!data) return E_POINTER;
+        if (offset > bytes.size()) return E_INVALIDARG;
+        const size_t avail = bytes.size() - offset;
+        if (size != 0 && size > avail) return E_INVALIDARG;
+        *data = bytes.empty() ? nullptr : bytes.data() + offset;
+        return S_OK;
+    }
     virtual long Unlock() { return S_OK; }
 };
 struct IDirect3DTexture9 {
@@ -177,20 +207,22 @@ struct IDirect3DTexture9 {
     int rt_frame = -1;
     IDirect3DSurface9* surface = nullptr;
     std::vector<uint8_t> rgba;
-    virtual ~IDirect3DTexture9() { mgfx_track_texture(this, 0); }
+    virtual ~IDirect3DTexture9() {
+        if (surface) { delete surface; surface = nullptr; }
+        mgfx_track_texture(this, 0);
+    }
     virtual uint32_t Release() { return 0; }
     virtual uint32_t GetLevelCount() { return 1; }
     virtual long GetSurfaceLevel(uint32_t, IDirect3DSurface9** surface_out) {
-        if (surface_out) {
-            if (!surface) {
-                surface = new IDirect3DSurface9();
-                surface->width = width;
-                surface->height = height;
-                surface->shadow_target = true;
-                surface->owner = this;
-            }
-            *surface_out = surface;
+        if (!surface_out) return E_POINTER;
+        if (!surface) {
+            surface = new IDirect3DSurface9();
+            surface->width = width;
+            surface->height = height;
+            surface->shadow_target = true;
+            surface->owner = this;
         }
+        *surface_out = surface;
         return S_OK;
     }
     bool lock_readonly = false;
@@ -236,7 +268,10 @@ struct IDirect3DTexture9 {
             }
             lock_a8 = false;
         }
-        if (!lock_readonly) mgfx_texture_upload(this);
+        if (!lock_readonly && !mgfx_texture_upload(this)) {
+            lock_readonly = false;
+            return E_FAIL;
+        }
         lock_readonly = false;
         return S_OK;
     }
@@ -247,6 +282,7 @@ struct IDirect3DTexture9 {
 };
 struct D3DDEVICE_CREATION_PARAMETERS { uint32_t AdapterOrdinal; uint32_t DeviceType; HWND hFocusWindow; uint32_t BehaviorFlags; };
 using _D3DMULTISAMPLE_TYPE = uint32_t;
+
 struct IDirect3DDevice9 {
     IDirect3DSurface9* m_depth = nullptr;
     virtual ~IDirect3DDevice9() = default;
@@ -254,12 +290,13 @@ struct IDirect3DDevice9 {
     virtual long Present(const void*, const void*, HWND, const void*) { return mgfx_present(); }
     virtual long BeginScene() { return mgfx_begin_scene(); }
     virtual long EndScene() { return S_OK; }
-    virtual long Clear(uint32_t count, const D3DRECT*, uint32_t flags, D3DCOLOR color, float z, uint32_t) {
-        // A non-zero rect count is a partial clear (HUD). bgfx can only clear the whole view,
-        // and those calls use z=0, which would reject the whole map
-        if (count) return S_OK;
+    virtual long Clear(uint32_t count, const D3DRECT* rects, uint32_t flags, D3DCOLOR color, float z, uint32_t) {
+        // partial clear is used by HUD; bgfx only clears the whole view so just succeed
+        if (count != 0) return S_OK;
         return mgfx_clear(flags, color, z);
     }
+
+
     virtual long GetRenderState(uint32_t, uint32_t* value) { if (value) *value = 0; return S_OK; }
     virtual long GetSamplerState(uint32_t stage, uint32_t type, uint32_t* value) {
         if (value) *value = mgfx_get_sampler(stage, type);
@@ -281,24 +318,107 @@ struct IDirect3DDevice9 {
     virtual long DrawPrimitiveUP(uint32_t prim, uint32_t prim_count, const void* verts, uint32_t stride) { return mgfx_draw(prim, 0, 0, prim_count, verts, stride, 0, nullptr, 0, false); }
     virtual long DrawIndexedPrimitiveUP(uint32_t prim, uint32_t, uint32_t vcount, uint32_t prim_count, const void* indices, uint32_t index_stride, const void* verts, uint32_t stride) { return mgfx_draw(prim, 0, 0, prim_count, verts, stride, vcount, indices, 0, index_stride == 4); }
     virtual long CreateTexture(uint32_t w, uint32_t h, uint32_t, uint32_t usage, uint32_t fmt, uint32_t, IDirect3DTexture9** tex, void*) {
-        if (tex) {
-            *tex = new IDirect3DTexture9();
-            (*tex)->width = w ? w : 1;
-            (*tex)->height = h ? h : 1;
-            (*tex)->format = fmt ? fmt : 21;
-            (*tex)->is_rt = (usage & D3DUSAGE_RENDERTARGET) != 0;
-            if (!(*tex)->is_rt) (*tex)->rgba.assign(size_t((*tex)->width) * (*tex)->height * 4, 0);
-        }
+        if (!tex) return E_POINTER;
+        *tex = nullptr;
+        if (w == 0 || h == 0 || w > 8192 || h > 8192) return E_INVALIDARG;
+        const uint64_t n = uint64_t(w) * uint64_t(h);
+        if (n > (SIZE_MAX / 4)) return E_OUTOFMEMORY;
+        try {
+            auto holder = std::unique_ptr<IDirect3DTexture9>(new IDirect3DTexture9());
+            holder->width = w; holder->height = h;
+            holder->format = fmt ? fmt : 21;
+            holder->is_rt = (usage & D3DUSAGE_RENDERTARGET) != 0;
+            if (!holder->is_rt) holder->rgba.assign(size_t(n) * 4, 0);
+            *tex = holder.release();
+        } catch (...) { *tex = nullptr; return E_OUTOFMEMORY; }
         return S_OK;
     }
-    virtual long CreateVertexBuffer(uint32_t bytes, uint32_t, uint32_t, uint32_t, IDirect3DVertexBuffer9** vb, void*) { if (vb) { *vb = new IDirect3DVertexBuffer9(); (*vb)->bytes.resize(bytes); } return S_OK; }
-    virtual long CreateIndexBuffer(uint32_t bytes, uint32_t, uint32_t fmt, uint32_t, IDirect3DIndexBuffer9** ib, void*) { if (ib) { *ib = new IDirect3DIndexBuffer9(); (*ib)->bytes.resize(bytes); (*ib)->index32 = fmt == 102; } return S_OK; }
-    virtual long CreateRenderTarget(uint32_t w, uint32_t h, uint32_t fmt, uint32_t, uint32_t, int, IDirect3DSurface9** out, void*) { if (out) { auto* s = new IDirect3DSurface9(); s->width = w?w:1; s->height = h?h:1; s->format = fmt; s->shadow_target = true; s->pixels.assign(s->width*s->height*4, 0); *out = s; } return S_OK; }
-    virtual long CreateDepthStencilSurface(uint32_t w, uint32_t h, uint32_t fmt, uint32_t, uint32_t, int, IDirect3DSurface9** out, void*) { if (out) { auto* s = new IDirect3DSurface9(); s->width = w?w:1; s->height = h?h:1; s->format = fmt; *out = s; } return S_OK; }
-    virtual long SetRenderTarget(uint32_t, IDirect3DSurface9* surface) { mgfx_set_render_target(surface); return S_OK; }
-    virtual long GetRenderTarget(uint32_t, IDirect3DSurface9** surface) { if (surface) *surface = new IDirect3DSurface9(); return S_OK; }
-    virtual long SetDepthStencilSurface(IDirect3DSurface9*) { return S_OK; }
-    virtual long GetDepthStencilSurface(IDirect3DSurface9** out) { if (out) { if (!m_depth) { m_depth = new IDirect3DSurface9(); m_depth->width = 1024; m_depth->height = 768; } *out = m_depth; } return S_OK; }
+
+
+    virtual long CreateVertexBuffer(uint32_t bytes, uint32_t, uint32_t, uint32_t, IDirect3DVertexBuffer9** vb, void*) {
+        if (!vb) return E_POINTER;
+        *vb = nullptr;
+        if (bytes > 64u * 1024u * 1024u) return E_OUTOFMEMORY;
+        try {
+            auto holder = std::unique_ptr<IDirect3DVertexBuffer9>(new IDirect3DVertexBuffer9());
+            holder->bytes.resize(bytes);
+            *vb = holder.release();
+        } catch (...) { *vb = nullptr; return E_OUTOFMEMORY; }
+        return S_OK;
+    }
+
+
+    virtual long CreateIndexBuffer(uint32_t bytes, uint32_t, uint32_t fmt, uint32_t, IDirect3DIndexBuffer9** ib, void*) {
+        if (!ib) return E_POINTER;
+        *ib = nullptr;
+        if (bytes > 64u * 1024u * 1024u) return E_OUTOFMEMORY;
+        try {
+            auto holder = std::unique_ptr<IDirect3DIndexBuffer9>(new IDirect3DIndexBuffer9());
+            holder->bytes.resize(bytes);
+            holder->index32 = fmt == 102;
+            *ib = holder.release();
+        } catch (...) { *ib = nullptr; return E_OUTOFMEMORY; }
+        return S_OK;
+    }
+
+
+    virtual long CreateRenderTarget(uint32_t w, uint32_t h, uint32_t fmt, uint32_t, uint32_t, int, IDirect3DSurface9** out, void*) {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (w == 0 || h == 0 || w > 8192 || h > 8192) return E_INVALIDARG;
+        const uint64_t n = uint64_t(w) * uint64_t(h);
+        if (n > (SIZE_MAX / 4)) return E_OUTOFMEMORY;
+        try {
+            auto holder = std::unique_ptr<IDirect3DSurface9>(new IDirect3DSurface9());
+            holder->width = w; holder->height = h; holder->format = fmt;
+            holder->shadow_target = true;
+            holder->pixels.assign(size_t(n) * 4, 0);
+            *out = holder.release();
+        } catch (...) { *out = nullptr; return E_OUTOFMEMORY; }
+        return S_OK;
+    }
+
+
+    virtual long CreateDepthStencilSurface(uint32_t w, uint32_t h, uint32_t fmt, uint32_t, uint32_t, int, IDirect3DSurface9** out, void*) {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (w == 0 || h == 0 || w > 8192 || h > 8192) return E_INVALIDARG;
+        try {
+            auto holder = std::unique_ptr<IDirect3DSurface9>(new IDirect3DSurface9());
+            holder->width = w; holder->height = h; holder->format = fmt;
+            holder->depth.assign(size_t(w) * h, 1.f);
+            *out = holder.release();
+        } catch (...) { *out = nullptr; return E_OUTOFMEMORY; }
+        return S_OK;
+    }
+
+
+    virtual long SetRenderTarget(uint32_t index, IDirect3DSurface9* surface) {
+        if (index != 0) return E_INVALIDARG;
+        return mgfx_set_render_target(surface);
+    }
+
+    virtual long GetRenderTarget(uint32_t, IDirect3DSurface9** surface) {
+        if (!surface) return E_POINTER;
+        *surface = mgfx_get_render_target();
+        return *surface ? S_OK : E_FAIL;
+    }
+
+    virtual long SetDepthStencilSurface(IDirect3DSurface9* s) {
+        // only track the pointer for save/restore; bgfx attaches its own depth
+        m_depth = s;
+        mgfx_set_depth_stencil(s);
+        return S_OK;
+    }
+
+
+    virtual long GetDepthStencilSurface(IDirect3DSurface9** out) {
+        if (!out) return E_POINTER;
+        if (!m_depth) m_depth = mgfx_get_depth_stencil();
+        *out = m_depth;
+        return *out ? S_OK : E_FAIL;
+    }
+
     virtual long SetViewport(const D3DVIEWPORT9* vp) { mgfx_set_viewport(vp); return S_OK; }
     virtual long GetViewport(D3DVIEWPORT9* vp) { mgfx_get_viewport(vp); return S_OK; }
     virtual long SetMaterial(const D3DMATERIAL9*) { return S_OK; }
@@ -308,50 +428,64 @@ struct IDirect3DDevice9 {
     virtual long GetGammaRamp(uint32_t, D3DGAMMARAMP*) { return S_OK; }
     virtual long GetDeviceCaps(D3DCAPS9* caps) { if (caps) { std::memset(caps, 0, sizeof(*caps)); caps->MaxTextureWidth = 4096; caps->MaxTextureHeight = 4096; caps->MaxSimultaneousTextures = 8; caps->MaxStreams = 8; caps->MaxAnisotropy = 16; caps->RasterCaps = 0x00100000; } return S_OK; }
     virtual uint32_t GetAvailableTextureMem() { return 256 * 1024 * 1024; }
-    virtual long ColorFill(IDirect3DSurface9*, const D3DRECT*, D3DCOLOR) { return S_OK; }
+    virtual long ColorFill(IDirect3DSurface9* surface, const D3DRECT* rect, D3DCOLOR color) {
+        return mgfx_color_fill(surface, rect, color);
+    }
+
     virtual long TestCooperativeLevel() { return S_OK; }
     virtual long Reset(D3DPRESENT_PARAMETERS* pp) {
         if (pp) mgfx_apply_present(pp->BackBufferWidth, pp->BackBufferHeight, pp->MultiSampleType, pp->PresentationInterval);
         return S_OK;
     }
     virtual long UpdateTexture(IDirect3DTexture9* src, IDirect3DTexture9* dst) {
-        if (!src || !dst || src->rgba.empty()) return S_OK;
+        if (!src || !dst) return E_POINTER;
+        if (src->rgba.empty() && src->a8.empty()) return E_INVALIDARG;
         dst->width = src->width ? src->width : 1;
         dst->height = src->height ? src->height : 1;
         dst->format = src->format ? src->format : 21;
         if (src->format == 28 && src->a8.size() >= size_t(dst->width) * dst->height) {
-            dst->rgba.resize(size_t(dst->width) * dst->height * 4);
+            try {
+                dst->rgba.resize(size_t(dst->width) * dst->height * 4);
+            } catch (...) { return E_OUTOFMEMORY; }
             for (uint32_t i = 0; i < dst->width * dst->height; ++i) {
                 uint8_t* p = dst->rgba.data() + size_t(i) * 4;
                 p[0] = p[1] = p[2] = 255;
                 p[3] = src->a8[i];
             }
         } else {
-            dst->rgba = src->rgba;
+            try { dst->rgba = src->rgba; } catch (...) { return E_OUTOFMEMORY; }
         }
-        // A rendertarget flag makes the upload a no-op. Cache pixels never
-        // reached the minimap, so the widget stayed at the clear color
         if (dst->is_rt && dst->bgfx_tex == 0xFFFF) {
             dst->is_rt = false;
             dst->fb = 0xFFFF;
         }
-        mgfx_texture_upload(dst);
+        if (!mgfx_texture_upload(dst)) return E_FAIL;
         return S_OK;
     }
-    virtual long GetRenderTargetData(IDirect3DSurface9*, IDirect3DSurface9*) { return S_OK; }
+
+    virtual long GetRenderTargetData(IDirect3DSurface9* src, IDirect3DSurface9* dst) {
+        return mgfx_get_render_target_data(src, dst);
+    }
+
     virtual int ShowCursor(int) { return 1; }
     virtual long GetCreationParameters(D3DDEVICE_CREATION_PARAMETERS* params) { if (params) std::memset(params, 0, sizeof(*params)); return S_OK; }
     virtual long GetFrontBufferData(uint32_t, IDirect3DSurface9*) { return S_OK; }
     virtual long CreateOffscreenPlainSurface(uint32_t w, uint32_t h, uint32_t fmt, uint32_t, IDirect3DSurface9** out, void*) {
-        if (!out) return E_FAIL;
-        auto* s = new IDirect3DSurface9();
-        s->width = w ? w : 1;
-        s->height = h ? h : 1;
-        s->format = fmt;
-        s->pixels.assign(size_t(s->width) * s->height * 4, 0);
-        *out = s;
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (w == 0 || h == 0 || w > 8192 || h > 8192) return E_INVALIDARG;
+        const uint64_t n = uint64_t(w) * uint64_t(h);
+        if (n > (SIZE_MAX / 4)) return E_OUTOFMEMORY;
+        try {
+            auto holder = std::unique_ptr<IDirect3DSurface9>(new IDirect3DSurface9());
+            holder->width = w; holder->height = h; holder->format = fmt;
+            holder->pixels.assign(size_t(n) * 4, 0);
+            *out = holder.release();
+        } catch (...) { *out = nullptr; return E_OUTOFMEMORY; }
         return S_OK;
     }
+
+
     virtual long GetDisplayMode(uint32_t, D3DDISPLAYMODE* mode) {
         int w = 1280, h = 720;
         mg_desktop_size(&w, &h);
