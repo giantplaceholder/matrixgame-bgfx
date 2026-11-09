@@ -79,9 +79,13 @@ void CBitmap::CreateRGB(int lenx, int leny)
 void CBitmap::CreateRGBA(int lenx, int leny, int pitch, void* data)
 {
     Clear();
+    if (lenx <= 0 || leny <= 0) return;
+    const size_t min_pitch = size_t(lenx) * 4u;
+    // pitch too small for a full rgba row — bail
+    if (pitch > 0 && size_t(pitch) < min_pitch) return;
     m_Size.x = lenx;
     m_Size.y = leny;
-    m_Pitch = pitch > 0 ? pitch : lenx * 4;
+    m_Pitch = pitch > 0 ? pitch : int(min_pitch);
     m_Format = BMF_FLAT;
     m_BytePP = 4;
     m_BitPP = 32;
