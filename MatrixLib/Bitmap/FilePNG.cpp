@@ -146,7 +146,7 @@ uintptr_t ReadStart_Buf(void *soubuf, uint32_t soubuflen, uint32_t *lenx, uint32
 
 uint32_t Read(uintptr_t id, void *buf, uint32_t lenline, uint32_t *arraycolor) {
     SPNGData *data = (SPNGData *)id;
-    png_bytep *row_pointers = NULL;
+    png_bytep * volatile row_pointers = NULL;
     uint8_t* tbuf;
     int i;
 
@@ -171,7 +171,9 @@ uint32_t Read(uintptr_t id, void *buf, uint32_t lenline, uint32_t *arraycolor) {
         if (png_get_rowbytes(data->png_ptr, data->info_ptr) > lenline)
             throw std::runtime_error{"Error"};
 
-        row_pointers = (png_bytep *)malloc((data->LenY) * sizeof(png_bytep));
+        row_pointers = (png_bytep *)malloc(size_t(data->LenY) * sizeof(png_bytep));
+        if (row_pointers == NULL)
+            throw std::runtime_error{"Error"};
         for (i = 0, tbuf = (uint8_t*)buf; i < data->LenY; i++, tbuf += lenline)
             row_pointers[i] = tbuf;
 
@@ -196,9 +198,9 @@ uint32_t Read(uintptr_t id, void *buf, uint32_t lenline, uint32_t *arraycolor) {
 
 int Write(void *bufout, int bufoutlen, void *buf, uint32_t ll, uint32_t lx, uint32_t ly, uint32_t bytepp, int rgb_to_bgr) {
     png_structp png_ptr = NULL;
-    png_infop info_ptr = NULL;
+    png_infop volatile info_ptr = NULL;
     SPNGData data;
-    uint8_t** rows = NULL;
+    uint8_t** volatile rows = NULL;
     int i;
 
     try
@@ -240,7 +242,9 @@ int Write(void *bufout, int bufoutlen, void *buf, uint32_t ll, uint32_t lx, uint
         if (rgb_to_bgr)
             png_set_bgr(png_ptr);
 
-        rows = (uint8_t**)malloc(ly * sizeof(uint8_t*));
+        rows = (uint8_t**)malloc(size_t(ly) * sizeof(uint8_t*));
+        if (rows == NULL)
+            throw std::runtime_error{"Error"};
         for (i = 0; i < int(ly); i++)
             rows[i] = ((uint8_t*)buf) + i * ll;
 
@@ -249,14 +253,16 @@ int Write(void *bufout, int bufoutlen, void *buf, uint32_t ll, uint32_t lx, uint
         png_write_end(png_ptr, info_ptr);
 
         if (png_ptr != NULL)
-            png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
+            { png_infop info = info_ptr; info_ptr = NULL;
+            png_destroy_write_struct(&png_ptr, info ? &info : (png_infopp)NULL); }
         if (rows != NULL)
             free(rows);
     }
     catch (const std::exception&)
     {
         if (png_ptr != NULL)
-            png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
+            { png_infop info = info_ptr; info_ptr = NULL;
+            png_destroy_write_struct(&png_ptr, info ? &info : (png_infopp)NULL); }
         if (rows != NULL)
             free(rows);
         return 0;
