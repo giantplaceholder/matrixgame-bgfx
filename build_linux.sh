@@ -30,6 +30,9 @@ ARCH="${MG_ARCH:-$(uname -m)}"
 OUT="${MG_OUT:-$SCRIPT_DIR/out}/linux/$ARCH"
 
 MODE="${MG_MODE:-both}"
+BUILD_TYPE="${MG_BUILD_TYPE:-Release}"
+KEEP_DEBUG_SYMBOLS="${MG_KEEP_DEBUG_SYMBOLS:-OFF}"
+DEBUG_DIAGNOSTICS="${MG_DEBUG_DIAGNOSTICS:-OFF}"
 die() { echo "build_linux: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
 
@@ -37,7 +40,14 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode=*) MODE="${1#*=}" ;;
         --mode) shift; MODE="${1:?--mode needs exe, dll or both}" ;;
-        -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --debug)
+            BUILD_TYPE="RelWithDebInfo"
+            KEEP_DEBUG_SYMBOLS="ON"
+            DEBUG_DIAGNOSTICS="ON"
+            ;;
+        --build-type=*) BUILD_TYPE="${1#*=}" ;;
+        --build-type) shift; BUILD_TYPE="${1:?--build-type needs a CMake build type}" ;;
+        -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
     shift
@@ -150,9 +160,11 @@ build_pic_deps
 export PKG_CONFIG_PATH="$PIC_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
 # one configure, bgfx bx and bimg get built once for every artifact
-log "configuring $MODE"
+log "configuring $MODE  build_type=$BUILD_TYPE  keep_debug_symbols=$KEEP_DEBUG_SYMBOLS  debug_diagnostics=$DEBUG_DIAGNOSTICS"
 cmake -S "$SRC/platform" -B "$WORK/build" \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DMG_KEEP_DEBUG_SYMBOLS="$KEEP_DEBUG_SYMBOLS" \
+    -DMG_DEBUG_DIAGNOSTICS="$DEBUG_DIAGNOSTICS" \
     -DCMAKE_PREFIX_PATH="$PIC_PREFIX" \
     -DMG_DEPS="$DEPS" \
     -DMG_PIC_PREFIX="$PIC_PREFIX" \

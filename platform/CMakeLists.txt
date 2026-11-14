@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # exe, dll, or both, one configure so bgfx is built once
 set(MG_TARGET "exe" CACHE STRING "Build kind: exe, dll or both")
 set_property(CACHE MG_TARGET PROPERTY STRINGS exe dll both)
+option(MG_KEEP_DEBUG_SYMBOLS "Keep debug information in MatrixGame binaries for crash trace symbolization" OFF)
+option(MG_DEBUG_DIAGNOSTICS "Enable richer optimized-build diagnostics and reliable stack unwinding" OFF)
 if(NOT MG_TARGET MATCHES "^(exe|dll|both)$")
     message(FATAL_ERROR "MG_TARGET must be exe, dll or both (got '${MG_TARGET}')")
 endif()
@@ -210,8 +212,19 @@ function(mg_add_game kind)
     target_compile_options(${target} PRIVATE
         -Wno-error -Wno-unused-parameter -fpermissive -fno-strict-aliasing -fno-tree-sra -fno-tree-fre
         -include ${CMAKE_CURRENT_SOURCE_DIR}/common/include/d3dx9.h)
-    # release objects still have dwarf from the static libs, strip it out of the image
-    target_link_options(${target} PRIVATE -Wl,--strip-debug)
+    if(MG_DEBUG_DIAGNOSTICS)
+        # keep release-like optimization, but make crash contexts
+        # and symbolization more useful on mingw builds
+        target_compile_options(${target} PRIVATE -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
+        if(NOT WIN32)
+            target_link_options(${target} PRIVATE -Wl,--build-id)
+        endif()
+    endif()
+    # preserve small release binaries by default, but allow
+    # crash-trace builds to retain DWARF for addr2line symbolization
+    if(NOT MG_KEEP_DEBUG_SYMBOLS)
+        target_link_options(${target} PRIVATE -Wl,--strip-debug)
+    endif()
     if(WIN32)
         if(kind STREQUAL "dll")
             target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2-static PNG::PNG ZLIB::ZLIB ntdll)
