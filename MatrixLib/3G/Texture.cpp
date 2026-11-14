@@ -410,9 +410,10 @@ void CTexture::MakeSolidTexture(int sx, int sy, DWORD color) {
 
 #ifndef USE_DX_MANAGED_TEXTURES
 
-void UnloadTextureManaged(DWORD user) {
-    CTextureManaged *tex = (CTextureManaged *)user;
+bool UnloadTextureManaged(uintptr_t user) {
+    CTextureManaged *tex = reinterpret_cast<CTextureManaged *>(user);
     tex->Unload();
+    return false;
 }
 #endif
 

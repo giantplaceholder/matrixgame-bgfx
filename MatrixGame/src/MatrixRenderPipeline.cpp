@@ -1753,40 +1753,7 @@ static void obj_clear(void) {
     ASSERT_DX(g_D3DD->SetTextureStageState(1, D3DTSS_RESULTARG, D3DTA_CURRENT));
 }
 
-// void obj_ordinal_tex_t2(SVOSurface *vo, DWORD user_param, int )
-//{
-//    if (user_param == 0)
-//    {
-//        ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
-//        if (vo->m_Tex->Flags() & TF_TRANS)
-//        {
-//            ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//        }
-//    } else
-//    {
-//
-//        CMatrixMapObject *o = (CMatrixMapObject *)user_param;
-//
-//        if (o->m_BurnTexVis == 255)
-//        {
-//            g_D3DD->SetRenderState(D3DRS_TEXTUREFACTOR,o->GetTerrainColor());
-//            ASSERT_DX(g_D3DD->SetTexture(0, o->m_BurnTex->Tex()));
-//            if (o->m_BurnTex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//            }
-//        } else
-//        {
-//            ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
-//            if (vo->m_Tex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//            }
-//        }
-//    }
-//}
-
-bool obj_ordinal_t2([[maybe_unused]] DWORD user_param, int) {
+bool obj_ordinal_t2([[maybe_unused]] uintptr_t user_param, int) {
     obj_clear();
 
     // ordinal mapping
@@ -1803,45 +1770,6 @@ bool obj_ordinal_t2([[maybe_unused]] DWORD user_param, int) {
 
     return false;
 }
-
-// void obj_ordinal_tex_t4(SVOSurface *vo, DWORD user_param, int )
-//{
-//    if (user_param == 0)
-//    {
-//        ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
-//        if (vo->m_Tex->Flags() & TF_TRANS)
-//        {
-//            ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//        }
-//    } else
-//    {
-//
-//        CMatrixMapObject *o = (CMatrixMapObject *)user_param;
-//
-//        if (o->m_BurnTexVis == 255)
-//        {
-//            g_D3DD->SetRenderState(D3DRS_TEXTUREFACTOR,o->GetTerrainColor());
-//            ASSERT_DX(g_D3DD->SetTexture(0, o->m_BurnTex->Tex()));
-//            if (o->m_BurnTex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//            }
-//        } else
-//        {
-//            DWORD tf = (o->GetTerrainColor() & 0x00FFFFFF) | (o->m_BurnTexVis << 24);
-//            g_D3DD->SetRenderState(D3DRS_TEXTUREFACTOR,tf);
-//
-//            ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
-//            ASSERT_DX(g_D3DD->SetTexture(1, o->m_BurnTex->Tex()));
-//            if (vo->m_Tex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//                //ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
-//                //ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
-//            }
-//        }
-//    }
-//}
 
 bool obj_ordinal_t4(uintptr_t user_param, int) {
     obj_clear();
@@ -1886,51 +1814,6 @@ bool obj_ordinal_t4(uintptr_t user_param, int) {
 
     return false;
 }
-
-// void obj_ordinal_tex_gloss_t4(SVOSurface *vo, DWORD user_param, int )
-//{
-//    if (user_param == 0)
-//    {
-//        ASSERT_DX(g_D3DD->SetTexture(0, vo->m_TexGloss->Tex()));
-//        ASSERT_DX(g_D3DD->SetTexture(1,g_MatrixMap->GetReflectionTexture()->Tex()));
-//        ASSERT_DX(g_D3DD->SetTexture(2, vo->m_Tex->Tex()));
-//
-//
-//        if (vo->m_Tex->Flags() & TF_TRANS)
-//        {
-//            ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//        }
-//    } else
-//    {
-//
-//        CMatrixMapObject *o = (CMatrixMapObject *)user_param;
-//
-//        if (o->m_BurnTexVis == 255)
-//        {
-//            g_D3DD->SetRenderState(D3DRS_TEXTUREFACTOR,o->GetTerrainColor());
-//            ASSERT_DX(g_D3DD->SetTexture(0, o->m_BurnTex->Tex()));
-//            if (o->m_BurnTex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//            }
-//        } else
-//        {
-//            DWORD tf = (o->GetTerrainColor() & 0x00FFFFFF) | (o->m_BurnTexVis << 24);
-//            g_D3DD->SetRenderState(D3DRS_TEXTUREFACTOR,tf);
-//
-//            ASSERT_DX(g_D3DD->SetTexture(0, vo->m_TexGloss->Tex()));
-//            ASSERT_DX(g_D3DD->SetTexture(1,g_MatrixMap->GetReflectionTexture()->Tex()));
-//            ASSERT_DX(g_D3DD->SetTexture(2, vo->m_Tex->Tex()));
-//            ASSERT_DX(g_D3DD->SetTexture(5, o->m_BurnTex->Tex()));
-//            if (vo->m_Tex->Flags() & TF_TRANS)
-//            {
-//                ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE));
-//                //ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
-//                //ASSERT_DX(g_D3DD->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE));
-//            }
-//        }
-//    }
-//}
 
 bool obj_ordinal_gloss_t4(uintptr_t user_param, int) {
     obj_clear();
@@ -2015,7 +1898,7 @@ bool obj_ordinal_gloss_t4(uintptr_t user_param, int) {
 
 ///////////// side
 
-bool obj_side_t3([[maybe_unused]] DWORD user_param, int) {
+bool obj_side_t3([[maybe_unused]] uintptr_t user_param, int) {
     obj_clear();
 
     // ordinal mapping
@@ -2035,15 +1918,7 @@ bool obj_side_t3([[maybe_unused]] DWORD user_param, int) {
     return false;
 }
 
-// void obj_side_tex_t2(SVOSurface *vo, DWORD user_param, int )
-//{
-//    LPDIRECT3DTEXTURE9 coltex = (LPDIRECT3DTEXTURE9)user_param;
-//
-//    ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
-//    ASSERT_DX(g_D3DD->SetTexture(1, coltex));
-//}
-
-bool obj_side_t2([[maybe_unused]] DWORD user_param, int) {
+bool obj_side_t2([[maybe_unused]] uintptr_t user_param, int) {
     obj_clear();
 
     // ASSERT_DX(g_D3DD->SetTextureStageState(0,D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2 ));
@@ -2069,17 +1944,7 @@ bool obj_side_t2([[maybe_unused]] DWORD user_param, int) {
     return false;
 }
 
-// void obj_side_tex_gloss_t5(SVOSurface *vo, DWORD user_param, int )
-//{
-//    LPDIRECT3DTEXTURE9 coltex = (LPDIRECT3DTEXTURE9)user_param;
-//
-//    ASSERT_DX(g_D3DD->SetTexture(0, vo->m_TexGloss->Tex()));
-//    ASSERT_DX(g_D3DD->SetTexture(1, g_MatrixMap->GetReflectionTexture()->Tex()));
-//    ASSERT_DX(g_D3DD->SetTexture(2, vo->m_Tex->Tex()));
-//    ASSERT_DX(g_D3DD->SetTexture(3, coltex));
-//}
-
-bool obj_side_gloss_t5([[maybe_unused]] DWORD user_param, int) {
+bool obj_side_gloss_t5([[maybe_unused]] uintptr_t user_param, int) {
     obj_clear();
 
     ASSERT_DX(g_D3DD->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0));

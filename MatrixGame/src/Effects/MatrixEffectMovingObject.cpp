@@ -709,13 +709,13 @@ void CMatrixEffectBuoy::Takt(float step) {
 
 void BuoySetupTex(
     [[maybe_unused]] SVOSurface *vo,
-    [[maybe_unused]] DWORD user_param,
+    [[maybe_unused]] uintptr_t user_param,
     int) {
     //    ASSERT_DX(g_D3DD->SetTexture(0, vo->m_Tex->Tex()));
     return;
 }
 
-bool BuoySetupStages([[maybe_unused]] DWORD user_param, int) {
+bool BuoySetupStages([[maybe_unused]] uintptr_t user_param, int) {
     DTRACE();
 
     ASSERT_DX(g_D3DD->SetFVF(VO_FVF));

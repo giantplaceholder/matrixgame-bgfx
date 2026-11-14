@@ -146,7 +146,7 @@ public:
 };
 
 #ifndef USE_DX_MANAGED_TEXTURES
-void UnloadTextureManaged(DWORD user);
+bool UnloadTextureManaged(uintptr_t user);
 #endif
 
 class CTextureManaged : public CBaseTexture {
@@ -165,7 +165,7 @@ public:
       : CBaseTexture()
 #ifndef USE_DX_MANAGED_TEXTURES
         ,
-        m_TexFrom(NULL), m_RemindCore(UnloadTextureManaged, (DWORD)this)
+        m_TexFrom(NULL), m_RemindCore(UnloadTextureManaged, reinterpret_cast<uintptr_t>(this))
 #endif
     {
         m_Type = CacheClass::TextureManaged;
