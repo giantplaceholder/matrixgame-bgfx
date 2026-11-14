@@ -19,7 +19,7 @@ namespace Base {
 class CPackCollection;
 #endif
 
-typedef void (*ENUM_FILES)(const std::wstring &name, DWORD user);
+typedef void (*ENUM_FILES)(const std::wstring &name, uintptr_t user);
 
 class BASE_API CFile : public CMain {
 #ifndef MAXEXP_EXPORTS
