@@ -1761,6 +1761,9 @@ bool CMatrixRobotAI::Damage(
         damagek = damagek * g_MatrixMap->m_Difficulty.k_friendly_fire;
 
     idx = Weap2Index(weap);
+    if (idx < 0 || idx >= static_cast<int>(WEAPON_COUNT))
+        return false;
+
     if (weap == WEAPON_REPAIR) {
         m_HitPoint += friendly_fire ? g_Config.m_RobotDamages[idx].friend_damage : g_Config.m_RobotDamages[idx].damage;
         if (m_HitPoint > m_HitPointMax) {

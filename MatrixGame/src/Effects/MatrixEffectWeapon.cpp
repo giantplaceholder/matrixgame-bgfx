@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "MatrixEffect.hpp"
+#include "../MatrixCrashLog.hpp"
 #include "MatrixEffectLightening.hpp"
 #include "MatrixEffectFlame.hpp"
 #include "MatrixEffectPointLight.hpp"
@@ -29,7 +30,13 @@ void CMatrixEffectWeapon::WeaponHit(CMatrixMapStatic *hiti, const D3DXVECTOR3 &p
 
     CMatrixEffectWeapon *w = (CMatrixEffectWeapon *)user;
 
-    bool give_damage = true;
+    // reject invalid types before indexing the damage tables
+    const int weapon_index = Weap2Index(w->m_Type);
+    bool give_damage = weapon_index >= 0 && weapon_index < static_cast<int>(WEAPON_COUNT);
+    if (!give_damage) {
+        MgLogEvent("WeaponHit rejected invalid weapon type=%u user=%p flags=0x%08X",
+                   static_cast<unsigned>(w->m_Type), reinterpret_cast<void*>(user), flags);
+    }
     if (w->m_Type == WEAPON_HOMING_MISSILE || w->m_Type == WEAPON_GUN || w->m_Type == WEAPON_CANNON0 ||
         w->m_Type == WEAPON_CANNON1 || w->m_Type == WEAPON_CANNON3) {
         if (POW2(w->m_WeaponDist * w->m_WeaponCoefficient) < m_Dist2)
@@ -755,7 +762,11 @@ void CMatrixEffectWeapon::SoundHit(EWeapon w, const D3DXVECTOR3 &pos) {
 
     };
 
-    ESound snd = snds[Weap2Index(w)];
+    const int sound_index = Weap2Index(w);
+    if (sound_index < 0 || sound_index >= static_cast<int>(sizeof(snds) / sizeof(snds[0]))) {
+        return;
+    }
+    const ESound snd = snds[sound_index];
     // ESoundLayer l = SL_ALL;
 
     CSound::AddSound(snd, pos, SL_ALL, SEF_SKIP);
