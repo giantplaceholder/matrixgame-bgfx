@@ -24,7 +24,7 @@ void CHelper::StaticInit(void) {
     m_Last = NULL;
 }
 
-CHelper::CHelper(int del_after_cnt_draw, int group) : CMain() {
+CHelper::CHelper(int del_after_cnt_draw, uintptr_t group) : CMain() {
     DTRACE();
 
     m_Prev = NULL;
@@ -503,7 +503,7 @@ void CHelper::DrawEnd(void) {
     g_D3DD->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
 }
 
-CHelper *CHelper::Create(int del_after_cnt_draw, int group) {
+CHelper *CHelper::Create(int del_after_cnt_draw, uintptr_t group) {
     DTRACE();
     return HNew(g_CacheHeap) CHelper(del_after_cnt_draw, group);
 }
@@ -579,7 +579,7 @@ void CHelper::AfterDraw(void) {
     }
 }
 
-void CHelper::DestroyByGroup(int group) {
+void CHelper::DestroyByGroup(uintptr_t group) {
     DTRACE();
 
     CHelper *he = m_First;

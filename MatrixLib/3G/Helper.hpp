@@ -33,7 +33,7 @@ class CHelper : public Base::CMain {
     static CHelper *m_First;
     static CHelper *m_Last;
 
-    CHelper(int del_after_cnt_draw = 0, int group = 0);
+    CHelper(int del_after_cnt_draw = 0, uintptr_t group = 0);
     ~CHelper();
 
     CHelper *m_Prev;
@@ -43,7 +43,7 @@ class CHelper : public Base::CMain {
     D3DXMATRIX m_Matrix;
 
     int m_DeleteAfterCntDraw;
-    int m_Group;
+    uintptr_t m_Group;
 
     D3DPRIMITIVETYPE m_Type;
     int m_CntPrimitive;
@@ -60,13 +60,13 @@ class CHelper : public Base::CMain {
 
 public:
     static void StaticInit(void);
-    static CHelper *Create(int del_after_cnt_draw = 0, int group = 0);
+    static CHelper *Create(int del_after_cnt_draw = 0, uintptr_t group = 0);
     static void Destroy(CHelper *he);
     static void ClearAll(void);
     static void DrawAll(void);
     static void AfterDraw_r(CHelper *del);
     static void AfterDraw(void);
-    static void DestroyByGroup(int group);
+    static void DestroyByGroup(uintptr_t group);
 
     static void DrawBegin(void);
     static void DrawEnd(void);
@@ -78,8 +78,8 @@ public:
     void DeleteAfterCntDraw(int zn) { m_DeleteAfterCntDraw = zn; }
     CHelper *Parent(void) { return m_Parent; }
     void Parent(CHelper *parent) { m_Parent = parent; }
-    int Group(void) { return m_Group; }
-    void Group(int zn) { m_Group = zn; }
+    uintptr_t Group(void) { return m_Group; }
+    void Group(uintptr_t zn) { m_Group = zn; }
 
     D3DXMATRIX *Matrix(void) { return &m_Matrix; }
 
