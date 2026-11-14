@@ -44,6 +44,7 @@ CMatrixMapLogic::CMatrixMapLogic() : CMatrixMap() {
     m_ZoneDataZero = NULL;
 
     m_MapPoint = NULL;
+    m_PathCalcBudget = 12;
 
     m_TaktNext = 0;
 
@@ -2440,6 +2441,8 @@ static bool Egg2(
 
 void CMatrixMapLogic::Takt(int step) {
     DTRACE();
+
+    m_PathCalcBudget = 12;
 
     if (g_RangersInterface) {
         g_RangersInterface->m_Takt();

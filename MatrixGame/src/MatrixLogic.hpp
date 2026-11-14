@@ -76,6 +76,8 @@ public:
     dword *m_ZoneDataZero;
 
     CPoint *m_MapPoint;
+    int m_PathCalcBudget;
+
 
     // int m_Takt;				// Game takt
     int m_TaktNext;

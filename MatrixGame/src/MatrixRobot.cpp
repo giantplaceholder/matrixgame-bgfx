@@ -1069,6 +1069,8 @@ void CMatrixRobotAI::LogicTakt(int ms) {
 
                 ZoneMoveCalc();
                 if (m_MovePathCnt <= 0) {
+                    if (g_MatrixMap->m_PathCalcBudget <= 0)
+                        break;
                     int nsh = m_Unit[0].u1.s1.m_Kind - 1;
                     int tx = m_DesX;
                     int ty = m_DesY;
@@ -1567,6 +1569,9 @@ void CMatrixRobotAI::ZoneMoveCalc() {
     if (m_ZoneCur < 0)
         return;
     ASSERT(m_ZoneCur >= 0);
+    if (g_MatrixMap->m_PathCalcBudget <= 0)
+        return;
+    g_MatrixMap->m_PathCalcBudget--;
     // 	ASSERT(m_ZoneNear>=0);
 
     int other_cnt = 0;
