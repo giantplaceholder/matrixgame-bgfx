@@ -962,14 +962,12 @@ int CMatrixMapLogic::FindLocalPath(int nsh, int size, int mx, int my,  // Нач
     re.right = std::max(re.right, dx + 1);
     re.bottom = std::max(re.bottom, dy + 1);
 
-    // if final route leg or no zone route
-    if (zonepathcnt <= 1 || zoneskipcnt + 1 >= zonepathcnt) {
-        re.left = 0;
-        re.top = 0;
-        re.right = m_SizeMove.x - size;
-        re.bottom = m_SizeMove.y - size;
-    } else {
-        int margin = std::max(64, std::max(abs(dx - mx), abs(dy - my)) + 32);
+    // keep final leg path searches local - full-map searches tax CPU too much
+    {
+        int span = std::max(abs(dx - mx), abs(dy - my));
+        int margin = (zonepathcnt <= 1 || zoneskipcnt + 1 >= zonepathcnt)
+                         ? std::max(128, span + 64)
+                         : std::max(64, span + 32);
         re.left = std::max(re.left - margin, 0);
         re.top = std::max(re.top - margin, 0);
         re.right = std::min(re.right + margin, m_SizeMove.x - size);
