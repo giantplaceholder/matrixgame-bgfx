@@ -1,3 +1,4 @@
+#include "MatrixCrashLog.hpp"
 // MatrixGame - SR2 Planetary battles engine with Windows and Linux support
 // Copyright (C) 2004-2019 Elemental Games, Katauri Interactive, CHK-Games
 // Copyright (C) 2020-2022 murgesku (https://github.com/murgesku)
@@ -1572,6 +1573,8 @@ void CMatrixRobotAI::ZoneMoveCalc() {
     if (g_MatrixMap->m_PathCalcBudget <= 0)
         return;
     g_MatrixMap->m_PathCalcBudget--;
+    MgLogEvent("ZoneMoveCalc side=%d map=%d,%d des=%d,%d zone=%d budget_left=%d",
+               GetSide(), m_MapX, m_MapY, m_DesX, m_DesY, m_ZoneCur, g_MatrixMap->m_PathCalcBudget);
     // 	ASSERT(m_ZoneNear>=0);
 
     int other_cnt = 0;
@@ -1639,6 +1642,8 @@ void CMatrixRobotAI::ZoneMoveCalc() {
 
     m_MovePathCnt = g_MatrixMap->OptimizeMovePath(m_Unit[0].u1.s1.m_Kind - 1, 4, m_MovePathCnt, m_MovePath);
     m_MovePathCur = 0;
+    if (m_MovePathCnt <= 0)
+        MgLogEvent("ZoneMoveCalc FAIL side=%d des=%d,%d", GetSide(), m_DesX, m_DesY);
 
     m_MovePathDist = 0.0f;
     m_MovePathDistFollow = 0.0f;

@@ -31,6 +31,7 @@ int mgwin_find_next(void* find, MgFindData* out);
 int mgwin_find_close(void* find);
 int mgwin_qpc(int64_t* out);
 int mgwin_qpf(int64_t* out);
+int mgwin_command_output(const wchar_t* command, char* output, uint32_t capacity);
 
 int mg_sdl_open(const char* title, int width, int height, int popup);
 void mg_sdl_close(void);

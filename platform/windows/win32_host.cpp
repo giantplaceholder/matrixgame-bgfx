@@ -74,6 +74,12 @@ extern "C" int mgwin_close(void* file) {
     return CloseHandle(file) ? 1 : 0;
 }
 
+extern "C" int mgwin_module_path(void* module, wchar_t* buffer, uint32_t capacity) {
+    if (!module || !buffer || capacity == 0) return 0;
+    const DWORD length = GetModuleFileNameW(static_cast<HMODULE>(module), buffer, capacity);
+    return length > 0 && length < capacity;
+}
+
 extern "C" void* mgwin_find_first(const wchar_t* pattern, MgFindData* out) {
     if (!pattern) return INVALID_HANDLE_VALUE;
     WIN32_FIND_DATAW data{};
@@ -106,4 +112,50 @@ extern "C" int mgwin_qpf(int64_t* out) {
     if (!QueryPerformanceFrequency(&value)) return 0;
     if (out) *out = value.QuadPart;
     return 1;
+}
+
+extern "C" int mgwin_command_output(const wchar_t* command, char* output, uint32_t capacity) {
+    if (!command || !output || capacity == 0) return 0;
+    output[0] = '\0';
+
+    SECURITY_ATTRIBUTES security{};
+    security.nLength = sizeof(security);
+    security.bInheritHandle = TRUE;
+
+    HANDLE read_pipe = nullptr;
+    HANDLE write_pipe = nullptr;
+    if (!CreatePipe(&read_pipe, &write_pipe, &security, 0)) return 0;
+    SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdOutput = write_pipe;
+    startup.hStdError = write_pipe;
+    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION process{};
+    std::wstring command_line(command);
+    const BOOL created = CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, TRUE,
+                                        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+    CloseHandle(write_pipe);
+    if (!created) {
+        CloseHandle(read_pipe);
+        return 0;
+    }
+
+    uint32_t used = 0;
+    while (used + 1 < capacity) {
+        DWORD got = 0;
+        const DWORD request = static_cast<DWORD>(capacity - used - 1);
+        if (!ReadFile(read_pipe, output + used, request, &got, nullptr) || got == 0) break;
+        used += got;
+    }
+    output[used] = '\0';
+
+    CloseHandle(read_pipe);
+    WaitForSingleObject(process.hProcess, 10000);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return static_cast<int>(used);
 }

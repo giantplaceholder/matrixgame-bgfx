@@ -255,9 +255,25 @@ constexpr uint32_t DT_BOTTOM = 8;
 constexpr uint32_t DT_WORDBREAK = 0x10;
 struct EXCEPTION_POINTERS { void* ExceptionRecord; void* ContextRecord; };
 using PEXCEPTION_POINTERS = EXCEPTION_POINTERS*;
-using LPTOP_LEVEL_EXCEPTION_FILTER = long (__stdcall *)(PEXCEPTION_POINTERS);
+using LPTOP_LEVEL_EXCEPTION_FILTER = LONG (__stdcall *)(PEXCEPTION_POINTERS);
+using PVECTORED_EXCEPTION_HANDLER = LONG (__stdcall *)(PEXCEPTION_POINTERS);
+#if defined(_WIN32)
+// these must resolve to real kernel32 api
+extern "C" __declspec(dllimport) LPTOP_LEVEL_EXCEPTION_FILTER
+SetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER);
+extern "C" __declspec(dllimport) void* __stdcall
+AddVectoredExceptionHandler(ULONG, PVECTORED_EXCEPTION_HANDLER);
+extern "C" __declspec(dllimport) ULONG __stdcall RemoveVectoredExceptionHandler(void*);
+extern "C" __declspec(dllimport) unsigned short __stdcall
+RtlCaptureStackBackTrace(ULONG, ULONG, void**, ULONG*);
+#else
 inline LPTOP_LEVEL_EXCEPTION_FILTER SetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER) { return nullptr; }
-constexpr long EXCEPTION_EXECUTE_HANDLER = 1;
+inline void* AddVectoredExceptionHandler(ULONG, PVECTORED_EXCEPTION_HANDLER) { return nullptr; }
+inline ULONG RemoveVectoredExceptionHandler(void*) { return 0; }
+inline unsigned short RtlCaptureStackBackTrace(ULONG, ULONG, void**, ULONG*) { return 0; }
+#endif
+constexpr LONG EXCEPTION_EXECUTE_HANDLER = 1;
+constexpr LONG EXCEPTION_CONTINUE_SEARCH = 0;
 inline LONG SetWindowLong(HWND, int, LONG) { return 0; }
 inline BOOL UnionRect(RECT* out, const RECT*, const RECT*) { if (out) *out = {}; return TRUE; }
 #define LOWORD(x) (static_cast<uint16_t>(static_cast<uintptr_t>(x) & 0xffff))

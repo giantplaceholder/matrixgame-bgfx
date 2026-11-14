@@ -214,10 +214,10 @@ function(mg_add_game kind)
     target_link_options(${target} PRIVATE -Wl,--strip-debug)
     if(WIN32)
         if(kind STREQUAL "dll")
-            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2-static PNG::PNG ZLIB::ZLIB)
+            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2-static PNG::PNG ZLIB::ZLIB ntdll)
             target_link_options(${target} PRIVATE -static -static-libgcc -static-libstdc++)
         else()
-            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2 PNG::PNG ZLIB::ZLIB)
+            target_link_libraries(${target} PRIVATE mg_host SDL2::SDL2 PNG::PNG ZLIB::ZLIB ntdll)
             # -static keeps winpthread inside the exe, sdl2 stays a dll, we link libSDL2.dll.a
             target_link_options(${target} PRIVATE -static -static-libgcc -static-libstdc++)
             # per-monitor v2 manifest, or windows bitmap-scales the window

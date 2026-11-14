@@ -10,16 +10,54 @@
 #include "MatrixFormGame.hpp"
 #include "MatrixGame.h"
 #include "3g.hpp"
+#include "MatrixCrashLog.hpp"
 
 #include <time.h>
+#include <exception>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
 #include <windows.h>
 
 SMGDRobotInterface g_RobotInterface;
 SMGDRangersInterface *g_RangersInterface = nullptr;
 int g_ExitState = 0;
 
-long __stdcall ExceptionHandler(PEXCEPTION_POINTERS) {
+#if defined(_WIN32)
+static void *g_vectored_exception_handle = nullptr;
+
+LONG __stdcall MgFirstChanceExceptionHandler(PEXCEPTION_POINTERS info) {
+    MgLogWindowsFirstChanceException(info);
+    return EXCEPTION_CONTINUE_SEARCH; // observe only, let the host handle it
+}
+#endif
+
+LONG __stdcall ExceptionHandler(PEXCEPTION_POINTERS info) {
+    char buf[128];
+    unsigned code = 0;
+    // read the exception code without dereferencing the record
+    if (info && info->ExceptionRecord)
+        std::memcpy(&code, info->ExceptionRecord, sizeof(code));
+    std::snprintf(buf, sizeof(buf), "unhandled SEH exception code=0x%08X", code);
+    // keep the exception path independent of game-object state
+    MgLogCrashWrite(buf, false);
     return EXCEPTION_EXECUTE_HANDLER;
+}
+
+[[noreturn]] void MgTerminateHandler() noexcept {
+    const char *reason = "std::terminate invoked";
+    try {
+        if (auto ep = std::current_exception())
+            std::rethrow_exception(ep);
+    } catch (const std::exception &e) {
+        MgLogCrashWrite(e.what(), false);
+        std::abort();
+    } catch (...) {
+        MgLogCrashWrite("std::terminate invoked for non-standard exception", false);
+        std::abort();
+    }
+    MgLogCrashWrite(reason, false);
+    std::abort();
 }
 
 BOOL APIENTRY DllMain(
@@ -30,13 +68,26 @@ BOOL APIENTRY DllMain(
     SetUnhandledExceptionFilter(ExceptionHandler);
     switch (ul_reason_for_call) {
         case DLL_PROCESS_ATTACH:
+#if defined(_WIN32)
+            MgLogSetWindowsModuleBase(reinterpret_cast<uintptr_t>(hModule));
+#endif
+            break;
         case DLL_THREAD_ATTACH:
         case DLL_THREAD_DETACH:
+            break;
         case DLL_PROCESS_DETACH:
+#if defined(_WIN32)
+            if (g_vectored_exception_handle) {
+                RemoveVectoredExceptionHandler(g_vectored_exception_handle);
+                g_vectored_exception_handle = nullptr;
+            }
+#endif
             break;
     }
     return TRUE;
 }
+
+// leave fatal POSIX signals to the OS
 
 void __stdcall Init(SMGDRangersInterface *ri) {
     g_RangersInterface = ri;
@@ -77,23 +128,40 @@ int __stdcall Support() {
 
 int __stdcall Run(HINSTANCE hinst, HWND hwnd, wchar *map, SRobotsSettings *settings, wchar *lang, wchar *txt_start,
                   wchar *txt_win, wchar *txt_loss, wchar *planet, SRobotGameState *rgs) {
-    uint32_t seed = (unsigned)time(nullptr);
+    // reinstall the filter when the battle entry point is entered
+    SetUnhandledExceptionFilter(ExceptionHandler);
+    std::set_terminate(MgTerminateHandler);
 
-    CGame::Init(hinst, hwnd, map, seed, settings, lang, txt_start, txt_win, txt_loss, planet);
-    
-    CFormMatrixGame formgame;
+    const uint32_t seed = (unsigned)time(nullptr);
+    MgLogInitWrite("battle init starting");
+#if defined(_WIN32)
+    // catch VEH access violations before host frame-based SEH handlers
+    if (!g_vectored_exception_handle)
+        g_vectored_exception_handle = AddVectoredExceptionHandler(1, MgFirstChanceExceptionHandler);
+    MgLogSetWindowsVehInstalled(g_vectored_exception_handle != nullptr);
+    MgLogInitWrite(g_vectored_exception_handle ? "battle init starting; Windows VEH registered"
+                                               : "ERROR: Windows VEH registration failed");
+#endif
+    try {
+        CGame::Init(hinst, hwnd, map, seed, settings, lang, txt_start, txt_win, txt_loss, planet);
+        MgLogInitWrite("battle init done");
 
-    CGame::RunGameLoop(&formgame);
+        CFormMatrixGame formgame;
+        CGame::RunGameLoop(&formgame);
+        CGame::SaveResult(rgs);
+        CGame::SafeFree();
+        ClipCursor(nullptr);
 
-    CGame::SaveResult(rgs);
-    CGame::SafeFree();
-
-    ClipCursor(nullptr);
-
-    if (FLAG(g_Flags, GFLAG_EXITLOOP))
-        return g_ExitState;
-    else
+        if (FLAG(g_Flags, GFLAG_EXITLOOP))
+            return g_ExitState;
         return 0;
+    } catch (const std::exception &e) {
+        MgLogCrashWrite(e.what(), false);
+        throw;
+    } catch (...) {
+        MgLogCrashWrite("unknown exception escaped robot battle Run()", false);
+        throw;
+    }
 }
 
 MATRIXGAMEDLL_API SMGDRobotInterface *__cdecl GetRobotInterface(void) {

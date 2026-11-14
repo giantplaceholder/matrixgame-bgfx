@@ -12,6 +12,7 @@
 #include "CFile.hpp"
 
 #include "MatrixGame.h"
+#include "MatrixCrashLog.hpp"
 #include "MatrixFormGame.hpp"
 #include "MatrixMap.hpp"
 #include "Interface/CInterface.h"
@@ -125,6 +126,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
         }
         L3GDeinit();
 
+        MgLogCrashWrite(utils::from_wstring(ex.Info()).c_str());
         lgr.fatal(utils::from_wstring(ex.Info()));
         MessageBox(NULL, utils::from_wstring(ex.Info()).c_str(), "Exception:", MB_OK);
     }
@@ -136,6 +138,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
         backtrace_symbols_fd(frames, n, 2);
 #endif
         std::fprintf(stderr, "Exception:: %s stage=%s\n", e.what(), g_mg_stage);
+        MgLogCrashWrite(e.what());
         lgr.fatal(e.what());
         MessageBox(NULL, e.what(), "Exception:", MB_OK);
     }
@@ -143,6 +146,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
 #ifdef ENABLE_HISTORY
         CDebugTracer::SaveHistory();
 #endif
+        MgLogCrashWrite("unknown exception");
         lgr.fatal("Unknown bug :(");
         MessageBox(NULL, "Unknown bug :(", "Exception:", MB_OK);
     }
@@ -839,6 +843,7 @@ void CGame::RunGameLoop(CFormMatrixGame *formgame) {
     catch (... /*ExceptionHandler(GetExceptionInformation())*/) {
         SETFLAG(g_Flags, GFLAG_EXITLOOP);
         g_ExitState += 100;
+        MgLogCrashWrite("RunGameLoop catch (...) exit_state+=100");
     }
 }
 
