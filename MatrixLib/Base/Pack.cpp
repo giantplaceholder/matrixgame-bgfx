@@ -504,7 +504,7 @@ int CHsFolder::FindNext(SSearchRec &S) {
 // **********************************************************************
 
 CPackFile::CPackFile(CHeap *heap, const wchar *name) : m_Heap(heap), m_FileName{name} {
-    m_Handle = 0xFFFFFFFF;
+    m_Handle = static_cast<uintptr_t>(-1);
 #ifdef SUPPORT_IN_MEMORY_STRUCTURES
     RESETFLAG(m_Flags, PFFLAG_EMPTY);
 #endif
@@ -532,7 +532,7 @@ void CPackFile::Clear(void) {
 }
 
 bool CPackFile::OpenPacketFile(void) {
-    if (m_Handle != 0xFFFFFFFF || m_RootFolder != NULL)
+    if (m_Handle != static_cast<uintptr_t>(-1) || m_RootFolder != NULL)
         ClosePacketFile();
 
 #ifdef SUPPORT_IN_MEMORY_STRUCTURES
@@ -559,7 +559,7 @@ bool CPackFile::OpenPacketFile(void) {
 #ifdef RAISE_ALL_EXCEPTIONS
         ERROR_S((L"Error openning package file [READ]:" + m_FileName).c_str());
 #endif
-        m_Handle = 0xFFFFFFFF;
+        m_Handle = static_cast<uintptr_t>(-1);
         return false;
     }
     std::fprintf(stderr, "pack open: %s\n", utils::from_wstring(m_FileName).c_str());
@@ -569,7 +569,7 @@ bool CPackFile::OpenPacketFile(void) {
 #ifdef RAISE_ALL_EXCEPTIONS
         ERROR_S((L"Error openning package file [READ]:" + m_FileName).c_str());
 #endif
-        m_Handle = 0xFFFFFFFF;
+        m_Handle = static_cast<uintptr_t>(-1);
         return false;
     }
     // Теперь читаем данные о корневой папке
@@ -589,7 +589,7 @@ bool CPackFile::OpenPacketFile(void) {
 }
 
 bool CPackFile::ClosePacketFile(void) {
-    if (m_Handle == 0xFFFFFFFF && m_RootFolder == NULL)
+    if (m_Handle == static_cast<uintptr_t>(-1) && m_RootFolder == NULL)
         return false;
     Clear();
     if (m_RootFolder) {
@@ -597,20 +597,20 @@ bool CPackFile::ClosePacketFile(void) {
         m_RootFolder = NULL;
     }
     bool res;
-    if (m_Handle != 0xFFFFFFFF) {
+    if (m_Handle != static_cast<uintptr_t>(-1)) {
         res = CloseHandle((HANDLE)m_Handle) != FALSE;
     }
     else {
         res = true;
     }
-    m_Handle = 0xFFFFFFFF;
+    m_Handle = static_cast<uintptr_t>(-1);
     return res;
 }
 
 // bool    CPackFile::CreatePacketFileEx(void)
 
 bool CPackFile::OpenPacketFileEx() {
-    if (m_Handle != 0xFFFFFFFF || m_RootFolder != NULL)
+    if (m_Handle != static_cast<uintptr_t>(-1) || m_RootFolder != NULL)
         ClosePacketFileEx();
 
 #ifdef SUPPORT_IN_MEMORY_STRUCTURES
@@ -638,7 +638,7 @@ bool CPackFile::OpenPacketFileEx() {
 #ifdef RAISE_ALL_EXCEPTIONS
         ERROR_S((L"Error openning package file [READ|WRITE]:" + m_FileName).c_str());
 #endif
-        m_Handle = 0xFFFFFFFF;
+        m_Handle = static_cast<uintptr_t>(-1);
         return false;
     }
     // Теперь читаем данные о местоположении корневого каталога
@@ -647,7 +647,7 @@ bool CPackFile::OpenPacketFileEx() {
 #ifdef RAISE_ALL_EXCEPTIONS
         ERROR_S((L"Error openning package file [READ]:" + m_FileName).c_str());
 #endif
-        m_Handle = 0xFFFFFFFF;
+        m_Handle = static_cast<uintptr_t>(-1);
         return false;
     }
     // Теперь читаем данные о корневой папке
@@ -706,8 +706,8 @@ DWORD CPackFile::Open(
             return 0xFFFFFFFF;
         FindClose(h);
 
-        m_Handles[H].m_Handle = (DWORD)CreateFileA(filename.c_str(), modeopen, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+        m_Handles[H].m_Handle = reinterpret_cast<uintptr_t>(CreateFileA(filename.c_str(), modeopen, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0));
 
         if ((HANDLE)m_Handles[H].m_Handle == INVALID_HANDLE_VALUE)
             return 0xFFFFFFFF;
@@ -735,7 +735,7 @@ DWORD CPackFile::Open(
     }
 
     // *** Файл был найден внутри пакетного файла - открываем его для чтения ***
-    if (m_Handle == 0xFFFFFFFF)
+    if (m_Handle == static_cast<uintptr_t>(-1))
         return 0xFFFFFFFF;
 
     m_Handles[H].m_Handle = m_Handle;
@@ -972,9 +972,9 @@ DWORD CPackFile::GetSize(DWORD Handle) {
     return m_Handles[Handle].m_Size;
 }
 
-DWORD CPackFile::GetHandle(DWORD Handle) {
+uintptr_t CPackFile::GetHandle(DWORD Handle) {
     if (Handle == 0xFFFFFFFF)
-        return 0xFFFFFFFF;
+        return static_cast<uintptr_t>(-1);
     if (Handle >= MAX_VIRTUAL_HANDLE_COUNT) {
         ERROR_S(L"Too big file handle number");
     }
@@ -1211,13 +1211,13 @@ DWORD CPackCollection::GetSize(DWORD Handle) {
     return P->GetSize(Handle & (MAX_VIRTUAL_HANDLE_COUNT - 1));
 }
 
-DWORD CPackCollection::GetHandle(DWORD Handle) {
+uintptr_t CPackCollection::GetHandle(DWORD Handle) {
     ASSERT(MAX_VIRTUAL_HANDLE_COUNT == (1 << MAX_VIRTUAL_HANDLE_COUNT_BITS));
 
     int number = Handle >> MAX_VIRTUAL_HANDLE_COUNT_BITS;
     CPackFile* P = GetPacketFile(number);
     if (P == NULL)
-        return 0xFFFFFFFF;
+        return static_cast<uintptr_t>(-1);
     return P->GetHandle(Handle & (MAX_VIRTUAL_HANDLE_COUNT - 1));
 }
 

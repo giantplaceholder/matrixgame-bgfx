@@ -228,7 +228,7 @@ public:
     bool SetPos(DWORD Handle, DWORD Pos, int ftype = FILE_BEGIN);
     DWORD GetPos(DWORD Handle);
     DWORD GetSize(DWORD Handle);
-    DWORD GetHandle(DWORD Handle);
+    uintptr_t GetHandle(DWORD Handle);
 
     // ***** Общесистемные процедуры работы с файлами ****
 
@@ -240,7 +240,7 @@ public:
     bool FileExists(const std::string& path) { return m_RootFolder && m_RootFolder->FileExists(path); }
 #endif
     DWORD CompressedFileSize(const std::string& filename) {
-        if (m_Handle == 0xFFFFFFFF)
+        if (m_Handle == static_cast<uintptr_t>(-1))
             return 0xFFFFFFFF;
         if (m_RootFolder)
             return m_RootFolder->CompressedFileSize(m_Handle, filename);
@@ -248,7 +248,7 @@ public:
     }
 
     DWORD DecompressedFileSize(const std::string& filename) {
-        if (m_Handle == 0xFFFFFFFF)
+        if (m_Handle == static_cast<uintptr_t>(-1))
             return 0xFFFFFFFF;
         if (m_RootFolder)
             return m_RootFolder->DecompressedFileSize(m_Handle, filename);
@@ -260,7 +260,7 @@ public:
     // bool    Compress(int *PInt,std::string& PStr);
 
     void ListFileNames(FILENAME_CALLBACK_FUNC Func) {
-        if (m_Handle == 0xFFFFFFFF)
+        if (m_Handle == static_cast<uintptr_t>(-1))
             return;
         if (m_RootFolder) {
             m_RootFolder->ListFileNames(Func);
@@ -314,7 +314,7 @@ public:
     bool SetPos(DWORD Handle, DWORD Pos, int ftype = FILE_BEGIN);
     DWORD GetPos(DWORD Handle);
     DWORD GetSize(DWORD Handle);
-    DWORD GetHandle(DWORD Handle);
+    uintptr_t GetHandle(DWORD Handle);
     // ******* работа с извлекаемыми файлами *********************
 };
 
