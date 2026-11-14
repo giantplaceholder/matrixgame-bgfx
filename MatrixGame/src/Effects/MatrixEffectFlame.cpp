@@ -102,8 +102,11 @@ void CFlamePuff::Draw(void) const {
 struct FlameData {
     D3DXVECTOR3 norm;
     FIRE_END_HANDLER handler;
-    DWORD uvalue;
+    uintptr_t uvalue;
 };
+
+static_assert(sizeof(decltype(FlameData::uvalue)) == sizeof(uintptr_t),
+              "Flame callback user data must preserve pointer width");
 
 static bool FlameEnum(const D3DXVECTOR3 &center, CMatrixMapStatic *ms, uintptr_t user) {
     FlameData *fd = (FlameData *)user;
