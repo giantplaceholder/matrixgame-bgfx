@@ -1409,6 +1409,11 @@ long mgfx_present() {
                   << " skip " << g_skipped << " drop " << g_dropped << " macro " << g_macro
                   << std::endl;
     }
+    g_draws = 0;
+    g_tex_draws = 0;
+    g_skipped = 0;
+    g_dropped = 0;
+    g_pick0 = g_pick2 = g_pick_other = g_pick_none = g_macro = 0;
     return S_OK;
 }
 static int g_rt_cursor = 0;
